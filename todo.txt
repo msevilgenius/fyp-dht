@@ -1,0 +1,43 @@
+id -> ip:port map
+
+netio:
+    listen
+      handle incoming -> dht
+    sendmessage(node, message)
+
+dht:
+    node info:
+    id
+    finger table
+    successor
+    predecessor
+    
+    
+    nodes stored in finger table?
+    duplication
+    or
+    cached map of ids -> nodes, finger table stores ids
+    
+logging:
+file/stdout?
+
+
+
+protocol design:
+
+dht:
+
+find_successor:
+req: find successor id
+resp: successor [of id] is s_id
+  --s_id needs actual address not just hash id
+
+notify:
+req: notify id
+resp: [ok]
+
+check_predecessor:
+req: are you there
+resp: yes i am here
+
+
