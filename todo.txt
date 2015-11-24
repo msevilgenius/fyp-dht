@@ -32,6 +32,10 @@ req: find successor id
 resp: successor [of id] is s_id
   --s_id needs actual address not just hash id
 
+stabilize:
+req: who is your predecessor?
+resp: predecessor is id
+
 notify:
 req: notify id
 resp: [ok]
