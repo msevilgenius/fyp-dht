@@ -41,24 +41,24 @@ hash_type dht_closest_preceding_node(node_data self, hash_type id);
  *
  * called periodically
  */
- void dht_stabalize(node_data self);
+void dht_stabalize(node_data self);
 
 /**
  * notify node_id of self's existence
  * self believes node_id is it's successor
  */
- void dht_notify(node_data self, hash_type node_id);
+void dht_notify(node_data self, hash_type node_id);
 
 /**
  *
  * called periodically
  */
- void dht_fix_fingers(node_data self);
+void dht_fix_fingers(node_data self);
 
 /**
  * checks whether predecessor is still alive, and updates internal state
  * called periodically
  */
- void dht_check_predecessor(node_data self);
+void dht_check_predecessor(node_data self);
 
 #endif // DHT_H
