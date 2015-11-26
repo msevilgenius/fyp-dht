@@ -12,7 +12,11 @@ struct net_server{
 };
 
 
-struct net_server* net_create_server();
+struct net_server* net_server_create();
+
+void net_server_destroy(struct net_server* srv);
+
+void net_server_run(struct net_server* srv);
 
 static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg);

@@ -28,7 +28,7 @@ dht_node_destroy(struct node_data* n)
 
 int dht_create(node_data self)
 {
-    net_create_server
+    net_server_create
 }
 
 int dht_join(node_data self, dht_node node)
