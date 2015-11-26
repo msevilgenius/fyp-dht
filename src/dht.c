@@ -21,7 +21,7 @@ struct node_data* dht_node_create()
     return node;
 }
 
-dht_node_destroy(struct node_data* n)
+void dht_node_destroy(struct node_data* n)
 {
     free n;
 }

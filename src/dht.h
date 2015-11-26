@@ -1,6 +1,8 @@
 #ifndef DHT_H
 #define DHT_H
 
+#include <stdint.h>
+
 #define hash_type uint32_t
 #define FINGER_SIZE_INIT 6
 
@@ -12,58 +14,58 @@ struct dht_node{
 
 struct node_data* dht_node_create();
 
-dht_node_destroy(struct node_data* n);
+void dht_node_destroy(struct node_data* n);
 
 /**
  * creates a new DHT network
  *
  */
-int dht_create(node_data self);
+int dht_create(struct dht_node* self);
 
 
 /**
  * join an existing DHT network
  *
  */
-int dht_join(node_data self, dht_node node);
+int dht_join(struct dht_node* self, struct dht_node* node);
 
 /**
  * ask node n for the successor of id
  */
-hash_type dht_find_successor(node_data self, dht_node n, hash_type id);
+hash_type dht_find_successor(struct dht_node* self, struct dht_node* n, hash_type id);
 
 /**
  * find highest known predecessor of id
  */
-hash_type dht_closest_preceding_node(node_data self, hash_type id);
+hash_type dht_closest_preceding_node(struct dht_node* self, hash_type id);
 
 /**
  *
  * called periodically
  */
-void dht_stabalize(node_data self);
+void dht_stabalize(struct dht_node* self);
 
 /**
  * notify node_id of self's existence
  * self believes node_id is it's successor
  */
-void dht_notify(node_data self, hash_type node_id);
+void dht_notify(struct dht_node* self, hash_type node_id);
 
 /**
  *
  * called periodically
  */
-void dht_fix_fingers(node_data self);
+void dht_fix_fingers(struct dht_node* self);
 
 /**
  * checks whether predecessor is still alive, and updates internal state
  * called periodically
  */
-void dht_check_predecessor(node_data self);
+void dht_check_predecessor(struct dht_node* self);
 
 /**
  * called when a message from another node is received
  */
-void handle_message(dht_node* from, char** message);
+void handle_message(struct dht_node* from, char** message);
 
 #endif // DHT_H
