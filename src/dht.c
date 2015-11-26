@@ -66,3 +66,8 @@ void dht_check_predecessor(node_data self)
 {
 
 }
+
+void handle_message(dht_node* from, char** message)
+{
+
+}

@@ -61,4 +61,9 @@ void dht_fix_fingers(node_data self);
  */
 void dht_check_predecessor(node_data self);
 
+/**
+ * called when a message from another node is received
+ */
+void handle_message(dht_node* from, char** message);
+
 #endif // DHT_H
