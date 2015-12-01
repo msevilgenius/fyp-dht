@@ -18,6 +18,8 @@ void net_server_destroy(struct net_server* srv);
 
 void net_server_run(struct net_server* srv);
 
+int net_send_message(struct net_server* srv, char** message, uint32_t IP, uint16_t port);
+
 static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg);
 

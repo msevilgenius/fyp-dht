@@ -68,4 +68,7 @@ void dht_check_predecessor(struct dht_node* self);
  */
 void handle_message(struct dht_node* from, char** message);
 
+
+int dht_send_message(struct dht_node* self, char** message, hash_type to);
+
 #endif // DHT_H
