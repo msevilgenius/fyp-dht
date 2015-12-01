@@ -14,12 +14,22 @@ struct node_data{
 struct node_data* dht_node_create()
 {
     struct node_data* node = malloc(sizeof(struct node_data));
+    if(!node) { return NULL; }
 
     node->id = 0;
     node->predecessor = 0;
     node->successor = 0;
+
     node->finger_table = malloc(sizeof(dht_node) * ID_BITS);
+    if (!node->finger_table){
+            free(node);
+            return NULL; }
+
     node->net = net_server_create();
+    if (!node->net){
+            free(node->finger_table);
+            free(node);
+            return NULL; }
 
     return node;
 }
@@ -34,14 +44,18 @@ void dht_node_destroy(struct node_data* n)
 
 int dht_create(node_data self)
 {
-    net_server_run(self->net);
+    int rv = net_server_run(self->net);
+    if (rv) return -1;
+
     n->predecessor = self->id;
+    return 0;
 }
 
 int dht_join(node_data self, dht_node node)
 {
     self->has_pred = 0; // nil
     self->successor = dht_find_successor_remote(self, node, self->id);
+    return 0;
 }
 
 hash_type dht_find_successor(node_data self, hash_type id)
@@ -78,7 +92,7 @@ void dht_stabalize(node_data self)
 void dht_notify(node_data self, hash_type node_id)
 {
     char msg[100];
-    snprintf(msg, 100, "f:%d\nt:%d\n%s%s", self->id, node_id, REQ_NOTIFY, MES_END);
+    snprintf(msg, 100, "%X\n%X\n%s%s", self->id, node_id, REQ_NOTIFY, MES_END);
     dht_send_message(self, msg, node_id);
 }
 
@@ -107,7 +121,10 @@ void dht_fix_fingers(node_data self)
 
 void dht_check_predecessor(node_data self)
 {
-
+    if (!self->has_pred){ return; }
+    char msg[100];
+    snprintf(msg, 100, "%X\n%X\n%s%s", self->id, self->predecessor, REQ_ALIVE, MES_END);
+    dht_send_message(self, msg, node_id);
 }
 
 void handle_message(dht_node* from, char** message)

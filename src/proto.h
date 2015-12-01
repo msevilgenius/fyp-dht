@@ -38,7 +38,16 @@ resp: yes i am here
 #define REQ_ALIVE
 #define RESP_ALIVE
 
-#define MES_END ("\r\n")
+#define MES_END ("\n\n")
+
+/*
+########\n              from
+########\n              to
+REQ_XXXXXX\n            message type
+NNNN\n                  [content length]
+\n                      END
+ASJDGKADBJOTJGEJB...    [content]
+*/
 
 
 #endif // PROTO_H
