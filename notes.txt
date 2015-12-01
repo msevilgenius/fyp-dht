@@ -1,0 +1,10 @@
+in find successor when checking if id is between this node and successor
+account for case when this node is the last node (i.e. has highest id of all nodes)
+by:
+if successor <= thisnode 
+then 
+    check thisnode-max and 0-successor
+else
+    check thisnode-successor
+    
+make function to compare nodes?
