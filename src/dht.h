@@ -30,9 +30,14 @@ int dht_create(struct dht_node* self);
 int dht_join(struct dht_node* self, struct dht_node* node);
 
 /**
+ * find successor of id
+ */
+hash_type dht_find_successor(struct dht_node* self, hash_type id);
+
+/**
  * ask node n for the successor of id
  */
-hash_type dht_find_successor(struct dht_node* self, struct dht_node* n, hash_type id);
+hash_type dht_find_successor_remote(struct dht_node* self, struct dht_node* n, hash_type id);
 
 /**
  * find highest known predecessor of id

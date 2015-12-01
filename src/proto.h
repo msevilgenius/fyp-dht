@@ -38,5 +38,7 @@ resp: yes i am here
 #define REQ_ALIVE
 #define RESP_ALIVE
 
+#define MES_END ("\r\n")
+
 
 #endif // PROTO_H

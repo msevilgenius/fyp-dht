@@ -40,9 +40,29 @@ void net_server_destroy(struct net_server* srv)
     }
 }
 
+/*
+ * callback for reading message from incoming connection
+ */
+static void read_incoming_cb(struct bufferevent *bev, void *ctx)
+{
+    struct evbuffer *input = bufferevent_get_input(bev);
+}
+
 static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg)
 {
     struct event_base* base = evconnlistener_get_base(listener);
 
+    struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+
+    bufferevent_setcb(bev, read_incoming_cb, NULL, echo_event_cb, NULL);
+
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
+
+}
+
+void net_server_run(struct net_server* srv)
+{
+
+    event_base_dispatch(srv->base);
 }
