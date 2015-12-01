@@ -17,7 +17,7 @@ struct net_server* net_server_create();
 
 void net_server_destroy(struct net_server* srv);
 
-void net_server_run(struct net_server* srv);
+int net_server_run(struct net_server* srv);
 
 int net_send_message(struct net_server* srv, char** message, uint32_t IP, uint16_t port);
 

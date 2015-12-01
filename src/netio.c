@@ -61,8 +61,10 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 }
 
-void net_server_run(struct net_server* srv)
+int net_server_run(struct net_server* srv)
 {
 
     event_base_dispatch(srv->base);
+
+    return 0;
 }
