@@ -18,7 +18,7 @@ struct node_data* dht_node_create()
     node->id = 0;
     node->predecessor = 0;
     node->successor = 0;
-    node->finger_table = malloc(sizeof(dht_node) * (sizeof(hash_type)/8); //number of bits in id * size of node
+    node->finger_table = malloc(sizeof(dht_node) * ID_BITS);
     node->net = net_server_create();
 
     return node;
@@ -61,7 +61,13 @@ dht_send_message(struct dht_node* self, char** message, hash_type to)
 
 hash_type dht_closest_preceding_node(node_data self, hash_type id)
 {
-
+    for (hash_type i = ID_BITS-1; i >= 0; --i){
+        hash_type n = self->finger_table[i]->id;
+        if (dht_id_in_range(n, self->id, id)){
+            return (n->id);
+        }
+    }
+    return (self->id);
 }
 
 void dht_stabalize(node_data self)

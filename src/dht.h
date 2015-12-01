@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define hash_type uint32_t
+#define ID_BITS 32
 #define FINGER_SIZE_INIT 6
 
 struct dht_node{
