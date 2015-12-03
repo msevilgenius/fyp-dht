@@ -68,7 +68,7 @@ hash_type dht_find_successor_remote(node_data self, dht_node n, hash_type id)
 
 }
 
-dht_send_message(struct dht_node* self, char** message, hash_type to)
+int dht_send_message(struct dht_node* self, dht_message* message)
 {
 
 }
@@ -127,7 +127,7 @@ void dht_check_predecessor(node_data self)
     dht_send_message(self, msg, node_id);
 }
 
-void handle_message(dht_node* from, char** message)
+void handle_message(dht_node* from, char* message)
 {
 
 }

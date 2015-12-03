@@ -13,6 +13,14 @@ struct dht_node{
     uint16_t port;
 };
 
+struct dht_message{
+    struct dht_node* to;
+    struct dht_node* from;
+    char* type;
+    int len;
+    char* content;
+};
+
 struct node_data* dht_node_create();
 
 void dht_node_destroy(struct node_data* n);
@@ -72,9 +80,9 @@ void dht_check_predecessor(struct dht_node* self);
 /**
  * called when a message from another node is received
  */
-void handle_message(struct dht_node* from, char** message);
+void handle_message(struct dht_node* from, char* message);
 
 
-int dht_send_message(struct dht_node* self, char** message, hash_type to);
+int dht_send_message(struct dht_node* self, dht_message* message);
 
 #endif // DHT_H
