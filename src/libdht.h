@@ -10,6 +10,6 @@
 /**
  *
  */
-hash_type get_id(char* name[]);
+hash_type get_id(const char* name);
 
 #endif // LIBDHT_H
