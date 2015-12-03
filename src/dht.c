@@ -4,8 +4,8 @@
 
 struct node_data{
     hash_type id;
-    hash_type successor;
-    hash_type predecessor;
+    dht_node successor;
+    dht_node predecessor;
     short has_pred;
     struct dht_node* finger_table;
     struct net_server* net;
@@ -17,8 +17,8 @@ struct node_data* dht_node_create()
     if(!node) { return NULL; }
 
     node->id = 0;
-    node->predecessor = 0;
-    node->successor = 0;
+    node->predecessor = {0, 0, 0};
+    node->successor = {0, 0, 0};
 
     node->finger_table = malloc(sizeof(dht_node) * ID_BITS);
     if (!node->finger_table){
