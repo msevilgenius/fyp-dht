@@ -68,3 +68,45 @@ int net_server_run(struct net_server* srv)
 
     return 0;
 }
+
+int net_send_message(struct net_server* srv, char* message, uint32_t IP, uint16_t port,
+                     bufferevent_data_cb reply_handler, void* rh_arg)
+{
+    struct event_base base* = srv->base;
+    struct sockaddr_in sin;
+    struct bufferevent *bev;
+
+    bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = htonl(IP);
+    sin.sin_port = htons(port);
+
+    bufferevent_setcb(bev, reply_handler, NULL, eventcb, rh_arg);
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
+    evbuffer_add_printf(bufferevent_get_output(bev), "%s", message);
+
+    if (bufferevent_socket_connect(bev,
+            (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        bufferevent_free(bev);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
