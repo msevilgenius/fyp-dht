@@ -69,6 +69,11 @@ int net_server_run(struct net_server* srv)
     return 0;
 }
 
+int connect_to(struct net_server* srv, uint32_t IP, uint16_t port)
+{
+
+}
+
 int net_send_message(struct net_server* srv, char* message, uint32_t IP, uint16_t port,
                      bufferevent_data_cb reply_handler, void* rh_arg)
 {

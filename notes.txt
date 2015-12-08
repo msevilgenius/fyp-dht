@@ -8,3 +8,14 @@ else
     check thisnode-successor
     
 make function to compare nodes?
+
+
+net:
+
+connect_to
+send message -> recv reply
+d/c
+
+recv_conn
+-> recv message -> send reply
+close
