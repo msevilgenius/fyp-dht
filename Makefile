@@ -11,13 +11,13 @@ TESTS=$(patsubst %.c,%,$(TEST_SRC))
 TARGET=build/libdht.a
 SO_TARGET=$(patsubst %.a,%.so,$(TARGET))
 
-all: $(TARGET) $(SO_TARGET) tests
+all: $(TARGET) $(SO_TARGET)
 
 dev: CFLAGS=-Wall -Isrc -Wextra $(OPTFLAGS)
-	dev: all
+dev: all
 
 $(TARGET): CFLAGS += -fPIC
-	$(TARGET): build $(OBJECTS)
+$(TARGET): build $(OBJECTS)
 	ar rcs $@ $(OBJECTS)
 	ranlib $@
 
