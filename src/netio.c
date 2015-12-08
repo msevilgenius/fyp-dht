@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define LISTEN_PORT 1337
+
 struct net_server* net_server_create()
 {
-    struct net_server *srv
+    struct net_server *srv;
     struct sockaddr_in serv_addr; //socket address to bind to
 
     memset(&serv_addr, 0, sizeof(struct sockaddr_in));
@@ -13,7 +15,7 @@ struct net_server* net_server_create()
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(LISTEN_PORT);
 
-    srv = malloc(sizeof(net_server));
+    srv = malloc(sizeof(struct net_server));
 
     if (!srv){
         // malloc failed
@@ -43,7 +45,7 @@ void net_server_destroy(struct net_server* srv)
 /*
  * callback for reading message from incoming connection
  */
-static void read_incoming_cb(struct bufferevent *bev, void *ctx)
+static void read_incoming_cb(struct bufferevent *bev, void *arg)
 {
     struct evbuffer *input = bufferevent_get_input(bev);
 }
@@ -55,7 +57,7 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
-    bufferevent_setcb(bev, read_incoming_cb, NULL, echo_event_cb, NULL);
+    bufferevent_setcb(bev, read_incoming_cb, NULL, NULL, NULL);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 
@@ -71,24 +73,28 @@ int net_server_run(struct net_server* srv)
 
 int connect_to(struct net_server* srv, uint32_t IP, uint16_t port)
 {
-
-}
-
-int net_send_message(struct net_server* srv, char* message, uint32_t IP, uint16_t port,
-                     bufferevent_data_cb reply_handler, void* rh_arg)
-{
-    struct event_base base* = srv->base;
     struct sockaddr_in sin;
-    struct bufferevent *bev;
-
-    bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
 
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(IP);
     sin.sin_port = htons(port);
+    // TODO save connection to outcons
 
-    bufferevent_setcb(bev, reply_handler, NULL, eventcb, rh_arg);
+    return -1
+}
+
+int net_send_message(struct net_server* srv, char* message, int connection,
+                     bufferevent_data_cb reply_handler, void* rh_arg)
+{
+    struct event_base* base = srv->base;
+    struct bufferevent *bev;
+
+    bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+
+    // TODO get connection instead from outconns
+
+    bufferevent_setcb(bev, reply_handler, NULL, NULL, rh_arg);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
     evbuffer_add_printf(bufferevent_get_output(bev), "%s", message);
 
