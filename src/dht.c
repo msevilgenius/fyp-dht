@@ -143,6 +143,32 @@ void handle_message(struct node_data* self, struct dht_message* message)
 
 }
 
+int parse_msg_type(const char* typestr)
+{
+    if (strcmp(typestr, REQ_SUCCESSOR) == 0){
+        return MSG_T_SUCC_REQ;
+    }
+    if (strcmp(typestr, REP_SUCCESSOR) == 0){
+        return MSG_T_SUCC_REP;
+    }
+    if (strcmp(typestr, REQ_PREDESSOR) == 0){
+        return MSG_T_PRED_REQ;
+    }
+    if (strcmp(typestr, REP_PREDESSOR) == 0){
+        return MSG_T_PRED_REP;
+    }
+    if (strcmp(typestr, REQ_ALIVE) == 0){
+        return MSG_T_ALIVE_REQ;
+    }
+    if (strcmp(typestr, REQ_ALIVE) == 0){
+        return MSG_T_ALIVE_REP;
+    }
+    if (strcmp(typestr, REQ_NOTIFY) == 0){
+        return MSG_T_NOTIF;
+    }
+    return -1;
+}
+
 void recv_message(struct bufferevent *bev, void *arg)
 {
     struct node_data* self = (struct node_data*) arg;
@@ -155,9 +181,41 @@ void recv_message(struct bufferevent *bev, void *arg)
     char* saveptr;
     char* token;
     char buf[ID_HEX_CHARS+2];
-    token = strtok_r(header_buf, "\n", &saveptr);
-    msg->from->id = strtoull(token, &endptr, 10);
-    token = strtok_r(header_buf, "\n", &saveptr);
-    msg->to->id = strtoull(token, &endptr, 10);
 
+    // from id
+    token = strtok_r(header_buf, "\n", &saveptr);
+    msg.from.id = strtoull(token, &endptr, 16);
+
+    // to id
+    token = strtok_r(header_buf, "\n", &saveptr);
+    msg.to.id = strtoull(token, &endptr, 16);
+
+    // type of message
+    token = strtok_r(header_buf, "\n", &saveptr);
+    if (msg.type = parse_msg_type(token) == -1) return;
+
+    // length of content or 0 if none
+    token = strtok_r(header_buf, "\n", &saveptr);
+    msg.len = (int) strtoul(token, &endptr, 10);
+    if (msg.len > 0){
+
+    }
+
+    handle_message(self, &msg);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
