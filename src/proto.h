@@ -1,6 +1,9 @@
 #ifndef PROTO_H
 #define PROTO_H
 
+#define MSG_FMT "%X\n%X\n%s\n%d\n"
+#define MSG_FMT_CONTENT "%X\n%X\n%s\n%d\n%s"
+
 /*
 find_successor:
 req: find successor id

@@ -138,9 +138,31 @@ void dht_check_predecessor(struct node_data* self)
     dht_send_message(self, msg, node_id);
 }
 
-void handle_message(struct node_data* self, struct dht_message* message)
+void handle_message(struct node_data* self, struct dht_message* message, struct evbuffer *replyto)
 {
+    switch (msg->type){
 
+        case MSG_T_SUCC_REQ:
+            break;
+        case MSG_T_PRED_REQ:
+            break;
+        case MSG_T_ALIVE_REQ:
+            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, REP_ALIVE, 0);
+            break;
+        case MSG_T_NOTIF:
+            break;
+
+        case MSG_T_SUCC_REP:
+            break;
+        case MSG_T_PRED_REP:
+            break;
+        case MSG_T_ALIVE_REP:
+            break;
+    }
+
+    if (msg->len > 0){
+        free(msg->content);}
+    return;
 }
 
 int parse_msg_type(const char* typestr)
@@ -160,7 +182,7 @@ int parse_msg_type(const char* typestr)
     if (strcmp(typestr, REQ_ALIVE) == 0){
         return MSG_T_ALIVE_REQ;
     }
-    if (strcmp(typestr, REQ_ALIVE) == 0){
+    if (strcmp(typestr, REP_ALIVE) == 0){
         return MSG_T_ALIVE_REP;
     }
     if (strcmp(typestr, REQ_NOTIFY) == 0){
@@ -174,34 +196,52 @@ void recv_message(struct bufferevent *bev, void *arg)
     struct node_data* self = (struct node_data*) arg;
     struct dht_message msg;
     struct evbuffer *input = bufferevent_get_input(bev);
-    char header_buf[ID_HEX_CHARS*2 + 20];
-    evbuffer_copyout(input, header_buf, sizeof(header_buf))
+    struct evbuffer *output = bufferevent_get_output(bev);
+    int header_len = 0;
+    int line_len;
 
     char* endptr;
     char* saveptr;
     char* token;
-    char buf[ID_HEX_CHARS+2];
 
     // from id
-    token = strtok_r(header_buf, "\n", &saveptr);
+    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
     msg.from.id = strtoull(token, &endptr, 16);
+    header_len += line_len + 1;
+    free(token);
 
     // to id
-    token = strtok_r(header_buf, "\n", &saveptr);
+    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
     msg.to.id = strtoull(token, &endptr, 16);
+    header_len += line_len + 1;
+    free(token);
 
     // type of message
-    token = strtok_r(header_buf, "\n", &saveptr);
+    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
     if (msg.type = parse_msg_type(token) == -1) return;
+    header_len += line_len + 1;
+    free(token);
 
     // length of content or 0 if none
-    token = strtok_r(header_buf, "\n", &saveptr);
+    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
     msg.len = (int) strtoul(token, &endptr, 10);
-    if (msg.len > 0){
+    header_len += line_len + 1;
+    free(token);
 
+    if (msg.len > 0){
+        msg.content = malloc(sizeof(char)*msg.len);
+        int copied = evbuffer_remove(input, msg.content, msg.len);
+        if (copied == -1) {
+            // TODO error reading
+        }
+        if (copied < message.len){
+            // TODO not enough data
+        }
+    }else{
+        msg.content = NULL;
     }
 
-    handle_message(self, &msg);
+    handle_message(self, &msg, output);
 }
 
 

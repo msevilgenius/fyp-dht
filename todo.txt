@@ -45,3 +45,6 @@ req: are you there
 resp: yes i am here
 
 
+send req msg -> get reply
+              | deal with timeout : on timeout callback -> find connection , remove from fingers/pred
+
