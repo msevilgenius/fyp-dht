@@ -81,7 +81,7 @@ int connect_to(struct net_server* srv, uint32_t IP, uint16_t port)
     sin.sin_port = htons(port);
     // TODO save connection to outcons
 
-    return -1
+    return -1;
 }
 
 int net_send_message(struct net_server* srv, char* message, int connection,
