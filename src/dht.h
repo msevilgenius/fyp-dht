@@ -80,6 +80,8 @@ void dht_fix_fingers(struct node_data* self);
  */
 void dht_check_predecessor(struct node_data* self);
 
+void dht_alive_timeout(struct node_data* self, struct dht_node* node);
+
 /**
  * called when a message from another node is received
  */

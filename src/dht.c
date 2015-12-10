@@ -140,6 +140,7 @@ void dht_check_predecessor(struct node_data* self)
 
 void handle_message(struct node_data* self, struct dht_message* message, struct evbuffer *replyto)
 {
+    struct dht_node other;
     switch (msg->type){
 
         case MSG_T_SUCC_REQ:
@@ -150,6 +151,9 @@ void handle_message(struct node_data* self, struct dht_message* message, struct 
             evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, REP_ALIVE, 0);
             break;
         case MSG_T_NOTIF:
+            other.id = message->from;
+            // TODO parse content -> other
+            dht_notified(self, other);
             break;
 
         case MSG_T_SUCC_REP:
