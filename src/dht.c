@@ -78,7 +78,7 @@ hash_type dht_find_successor_remote(struct node_data* self, dht_node n, hash_typ
 
 }
 
-int dht_send_message(struct dht_node* self, dht_message* message)
+int dht_send_message(struct node_data* self, dht_message* message)
 {
 
 }

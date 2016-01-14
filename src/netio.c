@@ -4,10 +4,16 @@
 
 #define LISTEN_PORT 1337
 
+struct cb_args{
+    struct node_data* self_node;
+    bufferevent_data_cb msg_handler;
+};
+
 struct net_server* net_server_create()
 {
     struct net_server *srv;
     struct sockaddr_in serv_addr; //socket address to bind to
+    struct cb_args
 
     memset(&serv_addr, 0, sizeof(struct sockaddr_in));
 
@@ -47,6 +53,7 @@ void net_server_destroy(struct net_server* srv)
  */
 static void read_incoming_cb(struct bufferevent *bev, void *arg)
 {
+    struct node_data* self_node = (struct node_data*) arg;
     struct evbuffer *input = bufferevent_get_input(bev);
 }
 
@@ -57,7 +64,7 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
-    bufferevent_setcb(bev, read_incoming_cb, NULL, NULL, NULL);
+    bufferevent_setcb(bev, read_incoming_cb, NULL, NULL, arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 

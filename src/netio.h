@@ -17,7 +17,7 @@ struct net_server{
 };
 
 
-struct net_server* net_server_create();
+struct net_server* net_server_create(struct node_data* self_node, bufferevent_data_cb msg_handler);
 
 void net_server_destroy(struct net_server* srv);
 
