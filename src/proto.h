@@ -48,7 +48,6 @@ resp: yes i am here
 ########\n              to
 REQ_XXXXXX\n            message type
 NNNN\n                  [content length]
-\n                      END
 ASJDGKADBJOTJGEJB...    [content]
 */
 
