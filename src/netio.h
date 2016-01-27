@@ -14,10 +14,12 @@ struct net_server{
     struct event_base *base;
     struct evconnlistener *listener_evt;
     struct bufferevent* out_conns[MAX_OUTGOING_CONNS];
+    bufferevent_data_cb incoming_handler;
+    void* incoming_handler_arg;
 };
 
 
-struct net_server* net_server_create(struct node_data* self_node, bufferevent_data_cb msg_handler);
+struct net_server* net_server_create(uint16_t port, bufferevent_data_cb msg_handler, void* handler_cb_arg);
 
 void net_server_destroy(struct net_server* srv);
 
