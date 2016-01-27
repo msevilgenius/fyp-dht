@@ -1,4 +1,4 @@
-#include "dht.h"
+#include "node.h"
 #include "netio.h"
 
 #include <string.h>
@@ -11,25 +11,25 @@
 #define MSG_T_ALIVE_REP 6
 #define MSG_T_ALIVE_REQ 7
 
-struct node_data{
+struct node_self{
     hash_type id;
-    dht_node successor;
-    dht_node predecessor;
+    node_info successor;
+    node_info predecessor;
     short has_pred;
-    struct dht_node* finger_table;
+    struct node_info* finger_table;
     struct net_server* net;
 };
 
-struct node_data* dht_node_create()
+struct node_self* node_create()
 {
-    struct node_data* node = malloc(sizeof(struct node_data));
+    struct node_self* node = malloc(sizeof(struct node_self));
     if(!node) { return NULL; }
 
     node->id = 0;
     node->predecessor = {0, 0, 0};
     node->successor = {0, 0, 0};
 
-    node->finger_table = malloc(sizeof(dht_node) * ID_BITS);
+    node->finger_table = malloc(sizeof(node_info) * ID_BITS);
     if (!node->finger_table){
             free(node);
             return NULL; }
@@ -43,7 +43,7 @@ struct node_data* dht_node_create()
     return node;
 }
 
-void dht_node_destroy(struct node_data* n)
+void node_destroy(struct node_self* n)
 {
     if (!n) { return; }
     if (n->net){ net_server_destroy(n->net); }
@@ -51,70 +51,70 @@ void dht_node_destroy(struct node_data* n)
     free(n);
 }
 
-int dht_create(struct node_data* self)
+int node_network_create(struct node_self* self)
 {
-    int rv = net_server_run(self->net);
-    if (rv) return -1;
-
     n->predecessor = self->id;
     n->has_pred = 1;
+
+    int rv = net_server_run(self->net);
+    if (rv) return -1;
     return 0;
 }
 
-int dht_join(struct node_data* self, dht_node node)
+int node_network_join(struct node_self* self, node_info node)
 {
     self->has_pred = 0; // nil
-    self->successor = dht_find_successor_remote(self, node, self->id);
+    self->successor = node_find_successor_remote(self, node, self->id);
     return 0;
 }
 
-hash_type dht_find_successor(struct node_data* self, hash_type id)
+hash_type node_find_successor(struct node_self* self, hash_type id)
 {
 
 }
 
-hash_type dht_find_successor_remote(struct node_data* self, dht_node n, hash_type id)
+hash_type node_find_successor_remote(struct node_self* self, node_info n, hash_type id)
 {
 
 }
 
-int dht_send_message(struct node_data* self, dht_message* message)
+int node_send_message(struct node_self* self, node_message* message)
 {
 
 }
 
-hash_type dht_closest_preceding_node(struct node_data* self, hash_type id)
+hash_type node_closest_preceding_node(struct node_self* self, hash_type id)
 {
     for (hash_type i = ID_BITS-1; i >= 0; --i){
         hash_type n = self->finger_table[i]->id;
-        if (dht_id_in_range(n, self->id, id)){
+        if (node_id_in_range(n, self->id, id)){
             return (n->id);
         }
     }
     return (self->id);
 }
 
-void dht_stabalize(struct node_data* self)
+void node_network_stabalize(struct node_self* self)
 {
 
 }
 
-void dht_notify(struct node_data* self, hash_type node_id)
+void node_notify_node(struct node_self* self, hash_type node_id)
 {
     char msg[100];
     snprintf(msg, 100, "%X\n%X\n%s%s", self->id, node_id, REQ_NOTIFY, MES_END);
-    dht_send_message(self, msg, node_id);
+    node_send_message(self, msg, node_id);
 }
 
-void dht_notified(struct node_data* self, struct dht_node node)
+void node_notified(struct node_self* self, struct node_info node)
 {
-    if (!self->has_pred || dht_id_in_range(node->id, self->predecessor, self->id)){
+    if (!self->has_pred || node_id_in_range(node->id, self->predecessor, self->id)){
         self->predecessor = node;
         self->has_pred = 1;
     }
 }
 
-void dht_id_in_range(hash_type id, hash_type min, hash_type max)
+void node_id_in_range(hash_type id, hash_type min, hash_type max)
 {
     if (max > min){ //easy
         return  ((id > min) && (id < max));
@@ -125,22 +125,22 @@ void dht_id_in_range(hash_type id, hash_type min, hash_type max)
     }
 }
 
-void dht_fix_fingers(struct node_data* self)
+void node_fix_fingers(struct node_self* self)
 {
 
 }
 
-void dht_check_predecessor(struct node_data* self)
+void node_check_predecessor(struct node_self* self)
 {
     if (!self->has_pred){ return; }
     char msg[100];
     snprintf(msg, 100, "%X\n%X\n%s%s", self->id, self->predecessor, REQ_ALIVE, MES_END);
-    dht_send_message(self, msg, node_id);
+    node_send_message(self, msg, node_id);
 }
 
-void handle_message(struct node_data* self, struct dht_message* message, struct evbuffer *replyto)
+void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto)
 {
-    struct dht_node other;
+    struct node_info other;
     switch (msg->type){
 
         case MSG_T_SUCC_REQ:
@@ -153,7 +153,7 @@ void handle_message(struct node_data* self, struct dht_message* message, struct 
         case MSG_T_NOTIF:
             other.id = message->from;
             // TODO parse content -> other
-            dht_notified(self, other);
+            node_notified(self, other);
             break;
 
         case MSG_T_SUCC_REP:
@@ -197,8 +197,8 @@ int parse_msg_type(const char* typestr)
 
 void recv_message(struct bufferevent *bev, void *arg)
 {
-    struct node_data* self = (struct node_data*) arg;
-    struct dht_message msg;
+    struct node_self* self = (struct node_self*) arg;
+    struct node_message msg;
     struct evbuffer *input = bufferevent_get_input(bev);
     struct evbuffer *output = bufferevent_get_output(bev);
     int header_len = 0;
