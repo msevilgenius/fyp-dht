@@ -29,14 +29,14 @@ struct node_self* node_create();
 void node_destroy(struct node_self* n);
 
 /**
- * creates a new DHT network
+ * creates a new overlay network
  *
  */
 int node_network_create(struct node_self* self);
 
 
 /**
- * join an existing DHT network
+ * join an existing overlay network
  *
  */
 int node_network_join(struct node_self* self, struct node_info* node);
