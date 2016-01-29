@@ -16,7 +16,7 @@ struct node_self{
     node_info successor;
     node_info predecessor;
     short has_pred;
-    struct node_info* finger_table;
+    struct node_info* finger_table[];
     struct net_server* net;
 };
 
@@ -143,12 +143,16 @@ void handle_message(struct node_self* self, struct node_message* message, struct
     struct node_info other;
     switch (msg->type){
 
-        case MSG_T_SUCC_REQ:
+        case MSG_T_SUCC_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
+            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_SUCCESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
+            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->successor->id, self->successor->IP, self->successor->port);
             break;
-        case MSG_T_PRED_REQ:
+        case MSG_T_PRED_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
+            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
+            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->predecessor->id, self->predecessor->IP, self->predecessor->port);
             break;
         case MSG_T_ALIVE_REQ:
-            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, REP_ALIVE, 0);
+            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_ALIVE, 0);
             break;
         case MSG_T_NOTIF:
             other.id = message->from;
@@ -157,8 +161,12 @@ void handle_message(struct node_self* self, struct node_message* message, struct
             break;
 
         case MSG_T_SUCC_REP:
+            other.id = message->from;
+            // TODO parse content -> other
             break;
         case MSG_T_PRED_REP:
+            other.id = message->from;
+            // TODO parse content -> other
             break;
         case MSG_T_ALIVE_REP:
             break;
@@ -222,7 +230,8 @@ void recv_message(struct bufferevent *bev, void *arg)
 
     // type of message
     token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
-    if (msg.type = parse_msg_type(token) == -1) return;
+    if (msg.type = parse_msg_type(token) == -1) {
+            return}; //TODO close connection
     header_len += line_len + 1;
     free(token);
 
