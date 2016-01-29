@@ -29,7 +29,7 @@ int net_server_run(struct net_server* srv);
  * initialise a connection to another node/server
  * returns a connection number to use with net_send_message or negative number on error
  */
-int connect_to(struct net_server* srv, uint32_t IP, uint16_t port);
+int net_connect_to(struct net_server* srv, uint32_t IP, uint16_t port);
 
 /*
  * send a message through a connection

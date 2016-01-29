@@ -89,7 +89,7 @@ int net_server_run(struct net_server* srv)
     return 0;
 }
 
-int connect_to(struct net_server* srv, uint32_t IP, uint16_t port)
+int net_connect_to(struct net_server* srv, uint32_t IP, uint16_t port)
 {
     struct sockaddr_in sin;
 
