@@ -13,12 +13,31 @@
 
 struct node_self{
     hash_type id;
+    node_info self;
     node_info successor;
     node_info predecessor;
     short has_pred;
     struct node_info* finger_table[];
     struct net_server* net;
 };
+
+int node_id_compare(hash_type id1, hash_type id2){
+    if (id1 == id2) return 0;
+    if (id1 < id2) return -1;
+    return 1;
+}
+
+// inclusive at both ends
+int node_id_in_range(hash_type id, hash_type min, hash_type max)
+{
+    if (max > min){ //easy
+        return  ((id >= min) && (id <= max));
+    }else if (max < min){ // min -> 0 -> max
+        return  ((id >= min) || ((id >= 0) && (id <= max)));
+    }else{ //max == min
+        return (id == max);
+    }
+}
 
 struct node_self* node_create()
 {
@@ -68,12 +87,22 @@ int node_network_join(struct node_self* self, node_info node)
     return 0;
 }
 
-hash_type node_find_successor(struct node_self* self, hash_type id)
+// TODO this needs to call a callback instead of returning a value because it might have to wait on  net comms
+struct node_info node_find_successor(struct node_self* self, hash_type id)
 {
+    if (node_id_compare(self->id, id) == 0){ // id is my id
+            return self->self;
+    }
 
+    if(node_id_in_range(id, self->id, self->successor.id)){ // id is between me and my successor
+        return self->successor;
+    }else{ // need to ask another node to find it
+        struct node_info n = node_closest_preceding_node(self, id);
+        node_find_successor_remote(self, n, id);
+    }
 }
 
-hash_type node_find_successor_remote(struct node_self* self, node_info n, hash_type id)
+struct node_info node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id)
 {
 
 }
@@ -83,7 +112,7 @@ int node_send_message(struct node_self* self, node_message* message)
 
 }
 
-hash_type node_closest_preceding_node(struct node_self* self, hash_type id)
+struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
 {
     for (hash_type i = ID_BITS-1; i >= 0; --i){
         hash_type n = self->finger_table[i]->id;
@@ -96,7 +125,9 @@ hash_type node_closest_preceding_node(struct node_self* self, hash_type id)
 
 void node_network_stabalize(struct node_self* self)
 {
-
+    // get successors predecessor
+    // reply goes to callback: if (me < s->p < s) then update me->s
+    //                         notify s
 }
 
 void node_notify_node(struct node_self* self, hash_type node_id)
@@ -111,17 +142,6 @@ void node_notified(struct node_self* self, struct node_info node)
     if (!self->has_pred || node_id_in_range(node->id, self->predecessor, self->id)){
         self->predecessor = node;
         self->has_pred = 1;
-    }
-}
-
-void node_id_in_range(hash_type id, hash_type min, hash_type max)
-{
-    if (max > min){ //easy
-        return  ((id > min) && (id < max));
-    }else if (max < min){ // min -> 0 -> max
-        return  ((id > min) || ((id >= 0) && (id < max)));
-    }else{ //max == min
-        return (id == max);
     }
 }
 
