@@ -87,29 +87,91 @@ int node_network_join(struct node_self* self, node_info node)
     return 0;
 }
 
-// TODO this needs to call a callback instead of returning a value because it might have to wait on  net comms
-struct node_info node_find_successor(struct node_self* self, hash_type id)
+struct successor_found_cb_data{
+    node_found_cb cb;
+    void* found_cb_arg;
+    struct node_info node;
+};
+
+void node_successor_found_cb(evutil_socket_t fd, short what, void *arg)
 {
+
+}
+
+int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, void* found_cb_arg)
+{
+    struct successor_found_cb_data *cb_data;
+    int rv = -1;
     if (node_id_compare(self->id, id) == 0){ // id is my id
-            return self->self;
-    }
 
+            cb_data = malloc(sizeof(struct successor_found_cb_data));
+            cb_data->cb           = cb
+            cb_data->found_cb_arg = found_cb_arg;
+            cb_data->node         = self->self;
+
+            if (event_base_once(net_get_base(self->net), -1, 0, node_successor_found_cb, cb_data, NULL) == -1){
+                free(cb_data);
+                return -1;
+            };
+    }
+    else
     if(node_id_in_range(id, self->id, self->successor.id)){ // id is between me and my successor
-        return self->successor;
+
+            cb_data = malloc(sizeof(struct successor_found_cb_data));
+            cb_data->cb           = cb
+            cb_data->found_cb_arg = found_cb_arg;
+            cb_data->node         = self->successor;
+
+            if (event_base_once(net_get_base(self->net), -1, 0, node_successor_found_cb, cb_data, NULL) == -1){
+                free(cb_data);
+                return -1;
+            };
+
     }else{ // need to ask another node to find it
-        struct node_info n = node_closest_preceding_node(self, id);
-        node_find_successor_remote(self, n, id);
+        struct node_info n = node_closest_preceding_node(self, id); // node to ask
+        return node_find_successor_remote(self, n, id);
     }
+    return 0;
 }
 
-struct node_info node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id)
+void node_successor_found_remote_cb(struct bufferevent *bev, void *ptr)
 {
+    struct node_message msg;
+    struct evbuffer *input = bufferevent_get_input(bev);
+    struct evbuffer *output = bufferevent_get_output(bev);
+    int header_len = 0;
+    int line_len;
+    char* endptr;
+    char* saveptr;
+    char* token;
 
+    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    msg.from.id = strtoull(token, &endptr, 16);
+    header_len += line_len + 1;
+    free(token);
 }
 
-int node_send_message(struct node_self* self, node_message* message)
+//ask node n  for successor of id
+int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id)
 {
+    struct node_message msg;
+    msg.from = self->self;
+    msg.to   = n;
+    msg.type = REQ_SUCCESSOR;
+    msg.len  = 0;
 
+    node_send_message(self, &msg, node_successor_found_remote_cb, );
+}
+
+int node_send_message(struct node_self* self, node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
+{
+    char* msg = malloc(sizeof(char) * (48 + msg->len));
+    if (msg->content != NULL){
+        snprintf(msg, 48, MSG_FMT_CONTENT, self->id, node_id, REQ_NOTIFY, msg->len, msg->content);
+    }else{
+        snprintf(msg, 48, MSG_FMT, self->id, node_id, REQ_NOTIFY, msg->len);
+    }
+    net_send_message(self->net, msg, , reply_handler, rh_arg);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
@@ -123,11 +185,29 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
     return (self->id);
 }
 
+void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb cb, void* found_cb_arg)
+{
+
+}
+
+void node_stabilize_sp_found(struct node_info succ, void *arg){
+
+    struct node_self* self = (struct node_self*) arg;
+
+    if (succ.port == 0 && succ.IP == 0){ // successor doesn't know its predecessor
+
+    }else
+    // if (me < s->p < s) then update me->s
+    if (node_id_in_range(succ.id, self->id, self->successor.id)){
+        self->successor = succ;
+    }
+    // notify s
+    node_notify_node(self, self->successor);
+}
+
 void node_network_stabalize(struct node_self* self)
 {
-    // get successors predecessor
-    // reply goes to callback: if (me < s->p < s) then update me->s
-    //                         notify s
+    node_get_predecessor_remote(self, self->successor, node_stabilize_sp_found, self);
 }
 
 void node_notify_node(struct node_self* self, hash_type node_id)
