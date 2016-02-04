@@ -29,6 +29,10 @@ void net_server_destroy(struct net_server* srv);
 
 int net_server_run(struct net_server* srv);
 
+struct event_base* net_get_base(struct net_server* srv){
+    return srv->base;
+};
+
 /*
  * initialise a connection to another node/server
  * returns a connection number to use with net_send_message or negative number on error
