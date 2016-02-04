@@ -95,7 +95,9 @@ struct successor_found_cb_data{
 
 void node_successor_found_cb(evutil_socket_t fd, short what, void *arg)
 {
-
+    struct successor_found_cb_data* cb_data = (struct successor_found_cb_data*) arg;
+    cb_data->cb(cb_data->node, cb_data->found_cb_arg);
+    free(cb_data);
 }
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, void* found_cb_arg)
@@ -134,8 +136,10 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, 
     return 0;
 }
 
-void node_successor_found_remote_cb(struct bufferevent *bev, void *ptr)
+void node_successor_found_remote_cb(struct bufferevent *bev, void *arg)
 {
+    struct successor_found_cb_data* cb_data = (struct successor_found_cb_data*) arg;
+
     struct node_message msg;
     struct evbuffer *input = bufferevent_get_input(bev);
     struct evbuffer *output = bufferevent_get_output(bev);
@@ -145,22 +149,32 @@ void node_successor_found_remote_cb(struct bufferevent *bev, void *ptr)
     char* saveptr;
     char* token;
 
+    //TODO parse msg properly
+
     token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
     msg.from.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
+
+    cb_data->node = ...
+
+    node_successor_found_cb(-1, 0, cb_data)
 }
 
 //ask node n  for successor of id
-int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id)
+int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct successor_found_cb_data* cb_data)
 {
     struct node_message msg;
     msg.from = self->self;
     msg.to   = n;
     msg.type = REQ_SUCCESSOR;
-    msg.len  = 0;
 
-    node_send_message(self, &msg, node_successor_found_remote_cb, );
+    char content[(ID_BITS/4) + 1];
+    snprintf(content, (ID_BITS/4) + 1, "%X", id);
+    msg.len  = ID_BITS/4;
+    msg.content = content;
+
+    node_send_message(self, &msg, node_successor_found_remote_cb, (void*) cb_data);
 }
 
 int node_send_message(struct node_self* self, node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
