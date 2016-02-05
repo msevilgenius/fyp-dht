@@ -104,7 +104,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     if (conn == -1){
         return -1; }
 
-    memset(srv->out_conns[conn].sin, 0, sizeof(srv->out_conns[conn].sin));
+    memset(&(srv->out_conns[conn].sin), 0, sizeof(srv->out_conns[conn].sin));
     srv->out_conns[conn].sin.sin_family = AF_INET;
     srv->out_conns[conn].sin.sin_addr.s_addr = htonl(IP);
     srv->out_conns[conn].sin.sin_port = htons(port);
