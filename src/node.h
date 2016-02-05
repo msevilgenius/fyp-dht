@@ -51,12 +51,12 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, 
 /**
  * ask node n for the successor of id
  */
-int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id);
+int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct successor_found_cb_data* cb_data);
 
 /**
  * find highest known predecessor of id
  */
-hash_type node_closest_preceding_node(struct node_self* self, hash_type id);
+struct node_info node_closest_preceding_node(struct node_self* self, hash_type id);
 
 /**
  * ask node n for its predecessor
@@ -92,9 +92,9 @@ void node_alive_timeout(struct node_self* self, struct node_info* node);
 /**
  * called when a message from another node is received
  */
-void handle_message(struct node_self* from, char* message);
+void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto);
 
 
-int node_send_message(struct node_self* self, node_message* message);
+int node_send_message(struct node_self* self, struct node_message* message);
 
 #endif // DHT_H
