@@ -89,58 +89,22 @@ int node_network_join(struct node_self* self, struct node_info node)
     return 0;
 }
 
-struct successor_found_cb_data{
-    node_found_cb cb;
+struct node_found_cb_data{
+    node_found_cb_t cb;
     void* found_cb_arg;
     struct node_info node;
 };
 
-void node_successor_found_cb(evutil_socket_t fd, short what, void *arg)
+void node_found(evutil_socket_t fd, short what, void *arg)
 {
-    struct successor_found_cb_data* cb_data = (struct successor_found_cb_data*) arg;
+    struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
     free(cb_data);
 }
 
-int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, void* found_cb_arg)
+void node_found_remote_cb(struct bufferevent *bev, void *arg)
 {
-    struct successor_found_cb_data *cb_data;
-    int rv = -1;
-    if (node_id_compare(self->id, id) == 0){ // id is my id
-
-            cb_data = malloc(sizeof(struct successor_found_cb_data));
-            cb_data->cb           = cb;
-            cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->self;
-
-            if (event_base_once(net_get_base(self->net), -1, 0, node_successor_found_cb, cb_data, NULL) == -1){
-                free(cb_data);
-                return -1;
-            };
-    }
-    else
-    if(node_id_in_range(id, self->id, self->successor.id)){ // id is between me and my successor
-
-            cb_data = malloc(sizeof(struct successor_found_cb_data));
-            cb_data->cb           = cb
-            cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->successor;
-
-            if (event_base_once(net_get_base(self->net), -1, 0, node_successor_found_cb, cb_data, NULL) == -1){
-                free(cb_data);
-                return -1;
-            };
-
-    }else{ // need to ask another node to find it
-        struct node_info n = node_closest_preceding_node(self, id); // node to ask
-        return node_find_successor_remote(self, n, id);
-    }
-    return 0;
-}
-
-void node_successor_found_remote_cb(struct bufferevent *bev, void *arg)
-{
-    struct successor_found_cb_data* cb_data = (struct successor_found_cb_data*) arg;
+    struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
 
     struct node_message msg;
     struct evbuffer *input = bufferevent_get_input(bev);
@@ -160,52 +124,88 @@ void node_successor_found_remote_cb(struct bufferevent *bev, void *arg)
 
     cb_data->node = ...
 
-    node_successor_found_cb(-1, 0, cb_data)
+    bufferevent_free(bev);
+
+    node_found(-1, 0, cb_data)
 }
 
-//ask node n  for successor of id
-int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct successor_found_cb_data* cb_data)
+//ask node n for successor of id
+int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct node_found_cb_data* cb_data)
 {
     struct node_message msg;
     msg.from = self->self;
     msg.to   = n;
-    msg.type = REQ_SUCCESSOR;
+    msg.type = MSG_T_SUCC_REQ;
 
     char content[(ID_BITS/4) + 1];
     snprintf(content, (ID_BITS/4) + 1, "%X", id);
     msg.len  = ID_BITS/4;
     msg.content = content;
 
-    return node_send_message(self, &msg, node_successor_found_remote_cb, (void*) cb_data);
+    return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
 }
 
-int node_send_message(struct node_self* self, struct node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
+int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
-    char* msg = malloc(sizeof(char) * (48 + msg->len));
-    if (msg->content != NULL){
-        snprintf(msg, 48, MSG_FMT_CONTENT, self->id, node_id, REQ_NOTIFY, msg->len, msg->content);
-    }else{
-        snprintf(msg, 48, MSG_FMT, self->id, node_id, REQ_NOTIFY, msg->len);
+    struct node_found_cb_data *cb_data;
+    int rv = -1;
+    if (node_id_compare(self->id, id) == 0){ // id is my id
+
+            cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->cb           = cb;
+            cb_data->found_cb_arg = found_cb_arg;
+            cb_data->node         = self->self;
+
+            if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+                free(cb_data);
+                return -1;
+            };
     }
-    net_send_message(self->net, msg, , reply_handler, rh_arg);
-}
+    else
+    if(node_id_in_range(id, self->id, self->successor.id)){ // id is between me and my successor
 
-struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
-{
-    for (hash_type i = ID_BITS-1; i >= 0; --i){
-        struct node_info n = self->finger_table[i]->id;
-        if (node_id_in_range(n, self->id, id)){
-            return (n);
-        }
+            cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->cb           = cb
+            cb_data->found_cb_arg = found_cb_arg;
+            cb_data->node         = self->successor;
+
+            if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+                free(cb_data);
+                return -1;
+            };
+
+    }else{ // need to ask another node to find it
+        struct node_info n = node_closest_preceding_node(self, id); // node to ask
+
+        cb_data = malloc(sizeof(struct node_found_cb_data));
+        cb_data->cb           = cb
+        cb_data->found_cb_arg = found_cb_arg;
+
+        return node_find_successor_remote(self, n, id, cb_data);
     }
-    return (self->self);
+    return 0;
 }
-// TODO
-void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb cb, void* found_cb_arg)
+
+void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb_t cb, void* found_cb_arg)
 {
+    struct node_message msg;
+    msg.from = self->self;
+    msg.to   = n;
+    msg.type = MSG_T_PRED_REQ;
 
+    char content[(ID_BITS/4) + 1];
+    snprintf(content, (ID_BITS/4) + 1, "%X", id);
+    msg.len  = ID_BITS/4;
+    msg.content = content;
+
+    cb_data = malloc(sizeof(struct node_found_cb_data));
+    cb_data->cb           = cb
+    cb_data->found_cb_arg = found_cb_arg;
+
+    return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
 }
 
+//found successor's predecessor (stabilize part 2)
 void node_stabilize_sp_found(struct node_info succ, void *arg){
 
     struct node_self* self = (struct node_self*) arg;
@@ -226,11 +226,19 @@ void node_network_stabalize(struct node_self* self)
     node_get_predecessor_remote(self, self->successor, node_stabilize_sp_found, self);
 }
 // TODO
-void node_notify_node(struct node_self* self, hash_type node_id)
+void node_notify_node(struct node_self* self, struct node_info* node)
 {
-    char msg[100];
-    snprintf(msg, 100, "%X\n%X\n%s%s", self->id, node_id, REQ_NOTIFY, MES_END);
-    node_send_message(self, msg, node_id);
+    struct node_message msg;
+    msg.from = self->self;
+    msg.to   = node;
+    msg.type = MSG_T_NOTIF;
+
+    char content[_];
+    snprintf(content, _, "", );
+    msg.len  = ;
+    msg.content = content;
+
+    node_send_message(self, msg, null, null);
 }
 
 void node_notified(struct node_self* self, struct node_info node)
@@ -245,14 +253,65 @@ void node_fix_fingers(struct node_self* self)
 {
 
 }
-// TODO
+// TODO + add cb
 void node_check_predecessor(struct node_self* self)
 {
     if (!self->has_pred){ return; }
-    char msg[100];
-    snprintf(msg, 100, "%X\n%X\n%s%s", self->id, self->predecessor, REQ_ALIVE, MES_END);
-    node_send_message(self, msg, node_id);
+
+    struct node_message msg;
+    msg.from = self->self;
+    msg.to   = node;
+    msg.type = MSG_T_ALIVE_REQ;
+
+    char content[_];
+    snprintf(content, _, "", );
+    msg.len  = ;
+    msg.content = content;
+
+    node_send_message(self, msg, , );
 }
+
+char* node_msg_type_str(int msg_type){
+    switch (type){
+        case MSG_T_ALIVE_REQ:
+            return REQ_ALIVE;
+        case MSG_T_NOTIF:
+            return REQ_NOTIFY;
+        case MSG_T_PRED_REQ:
+            return REQ_PREDECESSOR;
+        case MSG_T_SUCC_REQ:
+            return REQ_SUCCESSOR;
+        case MSG_T_ALIVE_REP:
+            return RESP_ALIVE;
+        case MSG_T_PRED_REP:
+            return RESP_PREDECESSOR;
+        case MSG_T_SUCC_REP:
+            return RESP_SUCCESSOR;
+    }
+}
+
+int node_send_message(struct node_self* self, struct node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
+{
+    char* msg_bytes = malloc(sizeof(char) * (48 + msg->len));
+    if (msg->content != NULL){
+        snprintf(msg_bytes, 48, MSG_FMT_CONTENT, msg->from, msg->to, node_msg_type_str(msg->type), msg->len, msg->content);
+    }else{
+        snprintf(msg_bytes, 48, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
+    }
+    net_send_message(self->net, msg_bytes, , reply_handler, rh_arg); //TODO
+}
+
+struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
+{
+    for (hash_type i = ID_BITS-1; i >= 0; --i){
+        struct node_info n = self->finger_table[i]->id;
+        if (node_id_in_range(n, self->id, id)){
+            return (n);
+        }
+    }
+    return (self->self);
+}
+
 // TODO
 void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto)
 {
@@ -261,7 +320,7 @@ void handle_message(struct node_self* self, struct node_message* message, struct
 
         case MSG_T_SUCC_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
             evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_SUCCESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
-            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->successor->id, self->successor->IP, self->successor->port);
+            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->successor->id, self->successor->IP, self->successor->port); //This is wrong, it should find the successor of id
             break;
         case MSG_T_PRED_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
             evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));

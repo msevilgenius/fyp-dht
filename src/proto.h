@@ -47,7 +47,7 @@ resp: yes i am here
 ########\n              from
 ########\n              to
 REQ_XXXXXX\n            message type
-NNNN\n                  [content length]
+NNNN\n                  content length
 ASJDGKADBJOTJGEJB...    [content]
 */
 

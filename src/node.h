@@ -24,7 +24,7 @@ struct node_message{
     char* content;
 };
 
-typedef void (*node_found_cb)(struct node_info, void *);
+typedef void (*node_found_cb_t)(struct node_info, void *);
 
 struct node_self* node_create();
 
@@ -46,12 +46,12 @@ int node_network_join(struct node_self* self, struct node_info* node);
 /**
  * find successor of id
  */
-int node_find_successor(struct node_self* self, hash_type id, node_found_cb cb, void* found_cb_arg);
+int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg);
 
 /**
  * ask node n for the successor of id
  */
-int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct successor_found_cb_data* cb_data);
+int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct node_found_cb_data* cb_data);
 
 /**
  * find highest known predecessor of id
@@ -61,7 +61,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 /**
  * ask node n for its predecessor
  */
-void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb cb, void* found_cb_arg);
+void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb_t cb, void* found_cb_arg);
 
 /**
  *
