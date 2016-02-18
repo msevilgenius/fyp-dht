@@ -19,7 +19,7 @@ struct node_self{
     struct node_info successor;
     struct node_info predecessor;
     short has_pred;
-    struct node_info* finger_table[];
+    struct node_info* finger_table;
     struct net_server* net;
 };
 
@@ -248,11 +248,45 @@ void node_notified(struct node_self* self, struct node_info node)
         self->has_pred = 1;
     }
 }
-// TODO
+
+//
+// Fix Fingers
+//
+
+struct finger_update_arg{
+    struct node_self* self;
+    int finger_num;
+};
+
+void finger_update(struct node_info node, void *data)
+{
+    struct finger_update_arg* fua = (struct finger_update_arg*) data;
+
+    fua->self->finger_table[fua->finger_num] = node;
+    free(fua);
+}
+
+void node_fix_a_finger(struct node_self* self, int finger_num)
+{
+    if (finger_num >= ID_BITS || finger_num < 0){
+        return; }// non-existent finger
+
+    hash_type finger_id = self->id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
+
+    struct finger_update_arg* fua = malloc(sizeof(struct finger_update_arg));
+    fua->finger_num = finger_num;
+    fua->self = self;
+
+    node_find_successor(self, finger_id, finger_update, fua);
+}
+
 void node_fix_fingers(struct node_self* self)
 {
-
+    for(int fnum = 0; fnum < ID_BITS; ++fnum){
+        node_fix_a_finger(self, fnum);
+    }
 }
+
 // TODO + add cb
 void node_check_predecessor(struct node_self* self)
 {

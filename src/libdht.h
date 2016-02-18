@@ -18,4 +18,9 @@ int send_to(node_info node, char* message);
 
 int route_to(hash_type id, char* message);
 
+/**
+ * returns 2^n for positive n
+ */
+int two_to_the_n(int n);
+
 #endif // LIBDHT_H
