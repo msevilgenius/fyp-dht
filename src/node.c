@@ -23,6 +23,10 @@ struct node_self{
     struct net_server* net;
 };
 
+//
+// ID helpers
+//
+
 int node_id_compare(hash_type id1, hash_type id2){
     if (id1 == id2) return 0;
     if (id1 < id2) return -1;
@@ -40,6 +44,10 @@ int node_id_in_range(hash_type id, hash_type min, hash_type max)
         return (id == max);
     }
 }
+
+//
+// node creation and cleanup
+//
 
 struct node_self* node_create(int listen_port)
 {
@@ -72,6 +80,10 @@ void node_destroy(struct node_self* n)
     free(n);
 }
 
+//
+// node network join/create
+//
+
 int node_network_create(struct node_self* self)
 {
     self->predecessor = self->id;
@@ -88,6 +100,10 @@ int node_network_join(struct node_self* self, struct node_info node)
     self->successor = node_find_successor_remote(self, node, self->id);
     return 0;
 }
+
+//
+// callbacks for when node is found
+//
 
 struct node_found_cb_data{
     node_found_cb_t cb;
@@ -128,6 +144,10 @@ void node_found_remote_cb(struct bufferevent *bev, void *arg)
 
     node_found(-1, 0, cb_data)
 }
+
+//
+// node finding
+//
 
 //ask node n for successor of id
 int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct node_found_cb_data* cb_data)
@@ -204,6 +224,21 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info* n, no
 
     return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
 }
+
+struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
+{
+    for (hash_type i = ID_BITS-1; i >= 0; --i){
+        struct node_info n = self->finger_table[i]->id;
+        if (node_id_in_range(n, self->id, id)){
+            return (n);
+        }
+    }
+    return (self->self);
+}
+
+//
+// network Stabilization
+//
 
 //found successor's predecessor (stabilize part 2)
 void node_stabilize_sp_found(struct node_info succ, void *arg){
@@ -305,6 +340,10 @@ void node_check_predecessor(struct node_self* self)
     node_send_message(self, msg, , );
 }
 
+//
+// network I/O wrapper and node communication things
+//
+
 char* node_msg_type_str(int msg_type){
     switch (type){
         case MSG_T_ALIVE_REQ:
@@ -333,17 +372,6 @@ int node_send_message(struct node_self* self, struct node_message* msg, bufferev
         snprintf(msg_bytes, 48, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
     }
     net_send_message(self->net, msg_bytes, , reply_handler, rh_arg); //TODO
-}
-
-struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
-{
-    for (hash_type i = ID_BITS-1; i >= 0; --i){
-        struct node_info n = self->finger_table[i]->id;
-        if (node_id_in_range(n, self->id, id)){
-            return (n);
-        }
-    }
-    return (self->self);
 }
 
 // TODO
