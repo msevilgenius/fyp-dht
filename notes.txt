@@ -19,3 +19,13 @@ d/c
 recv_conn
 -> recv message -> send reply
 close
+
+
+
+
+
+
+
+node_send_msg ( msg, to_node, replycb, errcb )
+    ->
+    here's a message (msg), send it to to_node, reply goes to replycb, failure goes to errcb

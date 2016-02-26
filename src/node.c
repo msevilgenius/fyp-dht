@@ -222,14 +222,14 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info* n, no
     cb_data->cb           = cb
     cb_data->found_cb_arg = found_cb_arg;
 
-    return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
+    node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
 {
     for (hash_type i = ID_BITS-1; i >= 0; --i){
-        struct node_info n = self->finger_table[i]->id;
-        if (node_id_in_range(n, self->id, id)){
+        struct node_info n = self->finger_table[i];
+        if (node_id_in_range(n->id, self->id, id)){
             return (n);
         }
     }
@@ -273,6 +273,7 @@ void node_notify_node(struct node_self* self, struct node_info* node)
     msg.len  = ;
     msg.content = content;
 
+    // TODO callback to close & free connection
     node_send_message(self, msg, null, null);
 }
 
@@ -374,15 +375,37 @@ int node_send_message(struct node_self* self, struct node_message* msg, bufferev
     net_send_message(self->net, msg_bytes, , reply_handler, rh_arg); //TODO
 }
 
+struct incoming_handler_data{
+    struct node_self* self;
+    struct evbuffer* replyto;
+    struct node_message* recvd_msg;
+};
+
+void node_successor_found_for_remote(struct node_info succ, void *data)
+{
+    struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
+
+    evbuffer_add_printf(handler_data->replyto, "id:%X\nipv4:%X\nport:%X", succ.id, succ.IP, succ.port);
+
+    free(handler_data->recvd_msg);
+    // TODO close connection and free buffer event at some point
+    free(handler_data);
+}
+
 // TODO
 void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto)
 {
+    struct incoming_handler_data *handler_data;
     struct node_info other;
     switch (msg->type){
 
-        case MSG_T_SUCC_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
-            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_SUCCESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
-            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->successor->id, self->successor->IP, self->successor->port); //This is wrong, it should find the successor of id
+        case MSG_T_SUCC_REQ:
+            handler_data = malloc(sizeof(struct incoming_handler_data));
+            handler_data->self = self;
+            handler_data->recvd_msg = message;
+            handler_data->replyto = replyto;
+            // TODO get id
+            node_find_successor(self, id, node_successor_found_for_remote, handler_data);
             break;
         case MSG_T_PRED_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
             evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
