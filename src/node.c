@@ -364,6 +364,7 @@ char* node_msg_type_str(int msg_type){
     }
 }
 
+// TODO handler needs redoing!
 int node_send_message(struct node_self* self, struct node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
 {
     char* msg_bytes = malloc(sizeof(char) * (48 + msg->len));
@@ -372,7 +373,17 @@ int node_send_message(struct node_self* self, struct node_message* msg, bufferev
     }else{
         snprintf(msg_bytes, 48, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
     }
-    net_send_message(self->net, msg_bytes, , reply_handler, rh_arg); //TODO
+    int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
+    if(connection < 0){
+        // error creating connection
+        return connection;
+    }
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
+    evbuffer_add(write_buf, msg_bytes, (48 + msg->len));
+    net_connection_set_handlers(self->net, connection,)
+
+    //TODO proper handlers
+    int rc = net_connection_activate(self->net, connection, reply_handler, );
 }
 
 struct incoming_handler_data{

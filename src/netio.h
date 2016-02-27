@@ -27,7 +27,7 @@ struct event_base* net_get_base(struct net_server* srv);
 int net_valid_connection_num(int connection);
 
 /*
- * initialise a connection to another node/server
+ * initialise a connection to another node/server (doesn't actually connect)
  * returns a connection number to use with net_connection functions or negative number on error
  */
 int net_connection_create(struct net_server* srv, uint32_t IP, uint16_t port);
