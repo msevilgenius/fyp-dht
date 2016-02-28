@@ -12,13 +12,23 @@ make function to compare nodes?
 
 net:
 
-connect_to
-send message -> recv reply
-d/c
+connections list
 
-recv_conn
--> recv message -> send reply
+create (setup)
+activate (actually connect)
 close
+
+get_read_buf(conn)
+get_write_buf(conn)
+
+set_read_cb(conn)
+set_err/timeout_cb(conn)
+
+
+setup:
+    set listen socket, handler, arg
+    
+    handler should update read/event/arg/(write) for connection
 
 
 
