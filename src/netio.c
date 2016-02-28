@@ -17,15 +17,20 @@ struct net_server{
     struct event_base *base;
     struct evconnlistener *listener_evt;
     struct net_connection connections[MAX_OUTGOING_CONNS];
-    bufferevent_data_cb incoming_handler;
+    net_connection_event_cb incoming_handler;
     void* incoming_handler_arg;
+};
+
+struct net_conn_cb_arg{
+    int conn;
+    struct net_server* srv;
 };
 
 //
 // server_ creation etc.
 //
 
-struct net_server* net_server_create(uint16_t port, bufferevent_data_cb msg_handler, void* handler_cb_arg)
+struct net_server* net_server_create(uint16_t port, net_connection_event_cb incoming_connection_cb, void* incoming_cb_arg)
 {
     struct net_server *srv;
     struct sockaddr_in serv_addr; //socket address to bind to
@@ -48,8 +53,8 @@ struct net_server* net_server_create(uint16_t port, bufferevent_data_cb msg_hand
         return NULL;
     }
 
-    srv->incoming_handler     = msg_handler;
-    srv->incoming_handler_arg = handler_cb_arg;
+    srv->incoming_handler = incoming_connection_cb;
+    srv->incoming_cb_arg = incoming_cb_arg;
 
     srv->listener_evt = evconnlistener_new_bind(srv->base, listen_evt_cb, (void*) srv,
                                 LEV_OPT_CLOSE_ON_FREE, -1,
@@ -106,10 +111,10 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
     }
 
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
-
     srv->connections[conn].bev = bev;
 
-    bufferevent_setcb(bev, srv->incoming_handler, NULL, NULL, srv->incoming_handler_arg);
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, );
+    srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 
@@ -149,11 +154,6 @@ int net_empty_connection_slot(struct net_server* srv)
 //
 // connection callbacks
 //
-
-struct net_conn_cb_arg{
-    int conn;
-    struct net_server* srv;
-};
 
 void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 {
@@ -291,9 +291,10 @@ int net_connection_activate(struct net_server* srv, int connection)
 
         if (bufferevent_socket_connect(bev, sin, sizeof(struct sockaddr)) < 0) {
             net_close_connection(connection);
-            // TODO do fail cb
+            // TODO do fail cb?
             return -1;
         }
+        bufferevent_enable(bev, EV_READ|EV_WRITE);
     }else{
         return -1;
     }
