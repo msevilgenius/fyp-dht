@@ -45,11 +45,11 @@ int net_connection_close(struct net_server* srv, int connection);
 /*
  * set handlers for read available, connection timeout, disconnection?
  */
-int net_connection_set_read_cb(struct net_server* srv, int connection, net_connection_data_cb cb)
+int net_connection_set_read_cb(struct net_server* srv, int connection, net_connection_data_cb cb);
 
-int net_connection_set_write_cb(struct net_server* srv, int connection, net_connection_data_cb cb)
+int net_connection_set_write_cb(struct net_server* srv, int connection, net_connection_data_cb cb);
 
-int net_connection_set_event_cb(struct net_server* srv, int connection, net_connection_event_cb cb)
+int net_connection_set_event_cb(struct net_server* srv, int connection, net_connection_event_cb cb);
 
 int net_connection_set_cb_arg(struct net_server* srv, int connection, void *cb_arg);
 
