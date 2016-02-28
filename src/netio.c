@@ -185,7 +185,7 @@ void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
         net_connection* connection = &(srv->connections[conn]);
         if (connection->evt_cb)
             connection->evt_cb(conn, what, connection->upper_cb_arg);
-        // TODO close/cleanup on error
+        // TODO close/cleanup on error?
     }
 }
 
@@ -206,18 +206,27 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
         return -1;
     }
 
-    memset(sin, 0, sizeof(struct sockaddr));
-    sin->sin_family = AF_INET;
-    sin->sin_addr.s_addr = htonl(IP);
-    sin->sin_port = htons(port);
-
 
     struct event_base* base = srv->base;
 
     srv->connections[conn].bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
     struct bufferevent *bev = srv->connections[connection].bev;
 
+    if (!bev){
+        return -1;
+    }
+
+    memset(sin, 0, sizeof(struct sockaddr));
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = htonl(IP);
+    sin->sin_port = htons(port);
+
+
     srv->connections[conn].net_cb_arg = malloc(sizeof(struct net_conn_cb_arg));
+    if (!srv->connections[conn].net_cb_arg){
+        net_close_connection(srv, conn);
+        return -1;
+    }
     net_cb_arg->conn = conn;
     net_cb_arg->srv = srv;
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
@@ -230,8 +239,14 @@ void net_close_connection(struct net_server* srv, int connection)
 {
     if (net_valid_connection_num(connection >= MAX_OUTGOING_CONNS)){
         struct bufferevent *bev = srv->connections[connection].bev;
-        bufferevent_free(bev);
-        free(srv->connections[connection].net_cb_arg);
+
+        if(bev) {
+            bufferevent_free(bev);
+        }
+        if (srv->connections[connection].net_cb_arg){
+            free(srv->connections[connection].net_cb_arg);
+        }
+        srv->connections[connection].net_cb_arg = NULL;
         srv->connections[connection].bev = NULL;
         memset(srv->connections[connection].sin, 0, sizeof(struct sockaddr));
     }
@@ -291,7 +306,6 @@ int net_connection_activate(struct net_server* srv, int connection)
 
         if (bufferevent_socket_connect(bev, sin, sizeof(struct sockaddr)) < 0) {
             net_close_connection(connection);
-            // TODO do fail cb?
             return -1;
         }
         bufferevent_enable(bev, EV_READ|EV_WRITE);
