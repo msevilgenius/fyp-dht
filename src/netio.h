@@ -16,6 +16,11 @@ struct net_connection;
 struct net_server;
 
 
+typedef void(* net_connection_data_cb)(int connection, void *arg);
+typedef void(* net_connection_event_cb)(int connection, short type, void *arg);
+
+
+
 struct net_server* net_server_create(uint16_t port, bufferevent_data_cb msg_handler, void* handler_cb_arg);
 
 void net_server_destroy(struct net_server* srv);
@@ -40,7 +45,11 @@ int net_connection_close(struct net_server* srv, int connection);
 /*
  * set handlers for read available, connection timeout, disconnection?
  */
-int net_connection_set_handlers(struct net_server* srv, int connection, read_ready, timeout, close);
+int net_connection_set_read_cb(struct net_server* srv, int connection, net_connection_data_cb cb, void *cb_arg)
+
+int net_connection_set_write_cb(struct net_server* srv, int connection, net_connection_data_cb cb, void *cb_arg)
+
+int net_connection_set_event_cb(struct net_server* srv, int connection, net_connection_event_cb cb, void *cb_arg)
 
 /*
  * actually open connection and begin I/O
