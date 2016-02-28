@@ -1,6 +1,7 @@
 #include "netio.h"
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 
 struct net_connection{
@@ -17,6 +18,7 @@ struct net_server{
     struct event_base *base;
     struct evconnlistener *listener_evt;
     struct net_connection connections[MAX_OUTGOING_CONNS];
+    pthread_mutex_t connections_lock;
     net_connection_event_cb incoming_handler;
     void* incoming_handler_arg;
 };
@@ -65,6 +67,13 @@ struct net_server* net_server_create(uint16_t port, net_connection_event_cb inco
         return NULL;
     }
 
+    if (pthread_mutex_init(&(srv->connections_lock), NULL) != 0){
+        evconnlistener_free(srv->listener_evt);
+        event_base_free(srv->base);
+        free(srv);
+        return NULL;
+    }
+
     return srv;
 }
 
@@ -78,6 +87,7 @@ void net_server_destroy(struct net_server* srv)
         event_base_loopbreak(srv->base);
         evconnlistener_free(srv->listener_evt);
         event_base_free(srv->base);
+        pthread_mutex_destroy(&(srv->connections_lock));
         free(srv);
     }
 }
@@ -198,11 +208,11 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     struct event_base *base = srv->base;
     struct sockaddr *sin = &(srv->connections[connection].sin);
 
+    pthread_mutex_lock(&(srv->connections_lock));
     // find empty connection slot
-    // lock srv->conns
     int conn = net_empty_connection_slot(srv);
     if (conn == -1){
-        // unlock srv->conns
+        pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
 
@@ -213,6 +223,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     struct bufferevent *bev = srv->connections[connection].bev;
 
     if (!bev){
+        pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
 
@@ -225,13 +236,14 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     srv->connections[conn].net_cb_arg = malloc(sizeof(struct net_conn_cb_arg));
     if (!srv->connections[conn].net_cb_arg){
         net_close_connection(srv, conn);
+        pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
     net_cb_arg->conn = conn;
     net_cb_arg->srv = srv;
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
-    // unlock srv->conns
+    pthread_mutex_unlock(&(srv->connections_lock));
     return conn;
 }
 
