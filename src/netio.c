@@ -7,9 +7,9 @@
 struct net_connection{
     struct bufferevent* bev;
     struct sockaddr_in sin;
-    net_connection_data_cb* read_cb;
-    net_connection_data_cb* write_cb;
-    net_connection_event_cb* evt_cb;
+    net_connection_data_cb_t read_cb;
+    net_connection_data_cb_t write_cb;
+    net_connection_event_cb_t evt_cb;
     void* upper_cb_arg;
     struct net_conn_cb_arg *net_cb_arg;
 };
@@ -19,7 +19,7 @@ struct net_server{
     struct evconnlistener *listener_evt;
     struct net_connection connections[MAX_OUTGOING_CONNS];
     pthread_mutex_t connections_lock;
-    net_connection_event_cb incoming_handler;
+    net_connection_event_cb_t incoming_handler;
     void* incoming_handler_arg;
 };
 
@@ -62,7 +62,7 @@ void net_connection_read_cb(struct bufferevent *bev, void *ctx)
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->read_cb)
-            connection->read_cb(conn, connection->upper_cb_arg);
+            (connection->read_cb)(conn, connection->upper_cb_arg);
     }
 }
 
@@ -93,7 +93,7 @@ void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
 // server_ creation etc.
 //
 
-struct net_server* net_server_create(uint16_t port, net_connection_event_cb incoming_connection_cb, void* incoming_cb_arg)
+struct net_server* net_server_create(uint16_t port, net_connection_event_cb_t incoming_connection_cb, void* incoming_cb_arg)
 {
     struct net_server *srv;
     struct sockaddr_in serv_addr; //socket address to bind to
@@ -191,7 +191,7 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
     srv->connections[conn].net_cb_arg->conn = conn;
     srv->connections[conn].net_cb_arg->srv = srv;
 
-    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb_t, srv->connections[conn].net_cb_arg);
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
@@ -246,7 +246,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     }
     srv->connections[conn].net_cb_arg->conn = conn;
     srv->connections[conn].net_cb_arg->srv = srv;
-    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb_t, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
     return conn;
@@ -269,7 +269,7 @@ void net_connection_close(struct net_server* srv, int conn)
     }
 }
 
-int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_data_cb cb)
+int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].read_cb = cb;
@@ -278,7 +278,7 @@ int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_
     return -1;
 }
 
-int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection_data_cb cb)
+int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].write_cb = cb;
@@ -287,7 +287,7 @@ int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection
     return -1;
 }
 
-int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection_event_cb cb)
+int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection_event_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].evt_cb = cb;
