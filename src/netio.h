@@ -55,6 +55,8 @@ int net_connection_set_cb_arg(struct net_server* srv, int connection, void *cb_a
 
 void* net_connection_get_cb_arg(struct net_server* srv, int connection);
 
+void net_connection_set_timeouts(struct net_server* srv, int connection, time_t read_t_secs, time_t write_t_secs);
+
 /*
  * actually open connection and begin I/O
  * for outgoing connections it is best to add message to write buffer then activating

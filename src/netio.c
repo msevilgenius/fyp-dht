@@ -113,17 +113,33 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     struct event_base* base = evconnlistener_get_base(listener);
 
+    pthread_mutex_lock(&(srv->connections_lock));
     int conn = net_empty_connection_slot(srv);
     if (conn < 0){
-        // TODO
+        // TODO log errors etc.
         // connections are full
+        pthread_mutex_lock(&(srv->connections_unlock));
         return;
     }
 
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     srv->connections[conn].bev = bev;
 
-    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, );
+    pthread_mutex_unlock(&(srv->connections_lock));
+
+    if (!bev){
+        return;
+    }
+
+    srv->connections[conn].net_cb_arg = malloc(sizeof(struct net_conn_cb_arg));
+    if (!srv->connections[conn].net_cb_arg){
+        net_close_connection(srv, conn);
+        return;
+    }
+    srv->connections[conn].net_cb_arg->conn = conn;
+    srv->connections[conn].net_cb_arg->srv = srv;
+
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
@@ -239,8 +255,8 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
         pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
-    net_cb_arg->conn = conn;
-    net_cb_arg->srv = srv;
+    srv->connections[conn].net_cb_arg->conn = conn;
+    srv->connections[conn].net_cb_arg->srv = srv;
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
@@ -308,6 +324,17 @@ void* net_connection_get_cb_arg(struct net_server* srv, int connection)
     return NULL;
 }
 
+void net_connection_set_timeouts(struct net_server* srv, int connection, time_t read_t_secs, time_t write_t_secs)
+{
+    if (!net_valid_connection_num(connection)){
+        return; }
+
+    struct timeval read_to;
+    struct timeval write_to;
+    read_to.tv_sec = read_t_secs;
+    write_to.tv_sec = write_t_secs;
+    bufferevent_set_timeouts(srv->connections[conn], read_to, write_to);
+}
 
 int net_connection_activate(struct net_server* srv, int connection)
 {
