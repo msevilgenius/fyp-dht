@@ -6,7 +6,7 @@
 
 struct net_connection{
     struct bufferevent* bev;
-    struct sockaddr sin;
+    struct sockaddr_in sin;
     net_connection_data_cb* read_cb;
     net_connection_data_cb* write_cb;
     net_connection_event_cb* evt_cb;
@@ -60,7 +60,7 @@ void net_connection_read_cb(struct bufferevent *bev, void *ctx)
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
-        net_connection* connection = &(srv->connections[conn]);
+        struct net_connection* connection = &(srv->connections[conn]);
         if (connection->read_cb)
             connection->read_cb(conn, connection->upper_cb_arg);
     }
@@ -71,7 +71,7 @@ void net_connection_write_cb(struct bufferevent *bev, void *ctx)
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
-        net_connection* connection = &(srv->connections[conn]);
+        struct net_connection* connection = &(srv->connections[conn]);
         if (connection->write_cb)
             connection->write_cb(conn, connection->upper_cb_arg);
     }
@@ -82,7 +82,7 @@ void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
-        net_connection* connection = &(srv->connections[conn]);
+        struct net_connection* connection = &(srv->connections[conn]);
         if (connection->evt_cb)
             connection->evt_cb(conn, what, connection->upper_cb_arg);
         // TODO close/cleanup on error?
@@ -185,7 +185,7 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     srv->connections[conn].net_cb_arg = malloc(sizeof(struct net_conn_cb_arg));
     if (!srv->connections[conn].net_cb_arg){
-        net_close_connection(srv, conn);
+        net_connection_close(srv, conn);
         return;
     }
     srv->connections[conn].net_cb_arg->conn = conn;
@@ -213,7 +213,6 @@ int net_server_run(struct net_server* srv)
 int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
 {
     struct event_base *base = srv->base;
-    struct sockaddr *sin = &(srv->connections[connection].sin);
 
     pthread_mutex_lock(&(srv->connections_lock));
     // find empty connection slot
@@ -223,18 +222,17 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
         return -1;
     }
 
-
-    struct event_base* base = srv->base;
+    struct sockaddr_in *sin = &(srv->connections[conn].sin);
 
     srv->connections[conn].bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-    struct bufferevent *bev = srv->connections[connection].bev;
+    struct bufferevent *bev = srv->connections[conn].bev;
 
     if (!bev){
         pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
 
-    memset(sin, 0, sizeof(struct sockaddr));
+    memset(sin, 0, sizeof(struct sockaddr_in));
     sin->sin_family = AF_INET;
     sin->sin_addr.s_addr = htonl(IP);
     sin->sin_port = htons(port);
@@ -242,7 +240,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
 
     srv->connections[conn].net_cb_arg = malloc(sizeof(struct net_conn_cb_arg));
     if (!srv->connections[conn].net_cb_arg){
-        net_close_connection(srv, conn);
+        net_connection_close(srv, conn);
         pthread_mutex_unlock(&(srv->connections_lock));
         return -1;
     }
@@ -254,108 +252,108 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     return conn;
 }
 
-void net_close_connection(struct net_server* srv, int connection)
+void net_connection_close(struct net_server* srv, int conn)
 {
-    if (net_valid_connection_num(connection >= MAX_OUTGOING_CONNS)){
-        struct bufferevent *bev = srv->connections[connection].bev;
+    if (net_valid_connection_num(conn)){
+        struct bufferevent *bev = srv->connections[conn].bev;
 
         if(bev) {
             bufferevent_free(bev);
         }
-        if (srv->connections[connection].net_cb_arg){
-            free(srv->connections[connection].net_cb_arg);
+        if (srv->connections[conn].net_cb_arg){
+            free(srv->connections[conn].net_cb_arg);
         }
-        srv->connections[connection].net_cb_arg = NULL;
-        srv->connections[connection].bev = NULL;
-        memset(srv->connections[connection].sin, 0, sizeof(struct sockaddr));
+        srv->connections[conn].net_cb_arg = NULL;
+        srv->connections[conn].bev = NULL;
+        memset(&(srv->connections[conn].sin), 0, sizeof(struct sockaddr));
     }
 }
 
-int net_connection_set_read_cb(struct net_server* srv, int connection, net_connection_data_cb cb)
+int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_data_cb cb)
 {
-    if (net_valid_connection_num(connection)){
+    if (net_valid_connection_num(conn)){
         srv->connections[conn].read_cb = cb;
         return 0;
     }
     return -1;
 }
 
-int net_connection_set_write_cb(struct net_server* srv, int connection, net_connection_data_cb cb)
+int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection_data_cb cb)
 {
-    if (net_valid_connection_num(connection)){
+    if (net_valid_connection_num(conn)){
         srv->connections[conn].write_cb = cb;
         return 0;
     }
     return -1;
 }
 
-int net_connection_set_event_cb(struct net_server* srv, int connection, net_connection_event_cb cb)
+int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection_event_cb cb)
 {
-    if (net_valid_connection_num(connection)){
+    if (net_valid_connection_num(conn)){
         srv->connections[conn].evt_cb = cb;
         return 0;
     }
     return -1;
 }
 
-int net_connection_set_cb_arg(struct net_server* srv, int connection, void *cb_arg)
+int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg)
 {
-    if (net_valid_connection_num(connection)){
-        srv->connections[conn].cb_arg = cb;
+    if (net_valid_connection_num(conn)){
+        srv->connections[conn].cb_arg = cb_arg;
         return 0;
     }
     return -1;
 }
 
-void* net_connection_get_cb_arg(struct net_server* srv, int connection)
+void* net_connection_get_cb_arg(struct net_server* srv, int conn)
 {
-    if (net_valid_connection_num(connection)){
+    if (net_valid_connection_num(conn)){
         return srv->connections[conn].cb_arg;
     }
     return NULL;
 }
 
-void net_connection_set_timeouts(struct net_server* srv, int connection, time_t read_t_secs, time_t write_t_secs)
+void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t_secs, time_t write_t_secs)
 {
-    if (!net_valid_connection_num(connection)){
+    if (!net_valid_connection_num(conn)){
         return; }
 
     struct timeval read_to;
     struct timeval write_to;
     read_to.tv_sec = read_t_secs;
     write_to.tv_sec = write_t_secs;
-    bufferevent_set_timeouts(srv->connections[conn], read_to, write_to);
+    bufferevent_set_timeouts(srv->connections[conn], &read_to, &write_to);
 }
 
-int net_connection_activate(struct net_server* srv, int connection)
+int net_connection_activate(struct net_server* srv, int conn)
 {
-    if (net_valid_connection_num(connection >= MAX_OUTGOING_CONNS)){
+    if (net_valid_connection_num(conn)){
 
-        struct sockaddr *sin = &(srv->connections[connection].sin);
-        struct bufferevent *bev = srv->connections[connection].bev;
+        struct sockaddr_in *sin = &(srv->connections[conn].sin);
+        struct bufferevent *bev = srv->connections[conn].bev;
 
-        if (bufferevent_socket_connect(bev, sin, sizeof(struct sockaddr)) < 0) {
-            net_close_connection(connection);
+        if (bufferevent_socket_connect(bev, (struct sockaddr *)sin, sizeof(struct sockaddr)) < 0) {
+            net_connection_close(srv, conn);
             return -1;
         }
         bufferevent_enable(bev, EV_READ|EV_WRITE);
-    }else{
-        return -1;
+        return 0;
     }
+    return -1;
 }
 
-struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int connection)
+struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int conn)
 {
-    if (net_valid_connection_num(connection >= MAX_OUTGOING_CONNS)){
-        return bufferevent_get_input(srv->connections[connection].bev);
+    if (net_valid_connection_num(conn)){
+        return bufferevent_get_input(srv->connections[conn].bev);
     }
     return NULL;
 };
 
-struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, int connection)
+struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, int conn)
 {
-    if (net_valid_connection_num(connection >= MAX_OUTGOING_CONNS)){
-        return bufferevent_get_output(srv->connections[connection].bev);
+    if (net_valid_connection_num(conn)){
+        return bufferevent_get_output(srv->connections[conn].bev);
     }
     return NULL;
 };
