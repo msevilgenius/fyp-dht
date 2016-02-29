@@ -55,15 +55,15 @@ struct node_self* node_create(int listen_port)
     if(!node) { return NULL; }
 
     node->id = 0;
-    node->predecessor = {0, 0, 0};
-    node->successor = {0, 0, 0};
+    memset(&(node->predecessor), 0, sizeof(struct node_info));
+    memset(&(node->successor), 0, sizeof(struct node_info));
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
     if (!node->finger_table){
             free(node);
             return NULL; }
 
-    node->net = net_server_create(listen_port, recv_message, (void*) node);
+    node->net = net_server_create(listen_port, incoming_connection, (void*) node);
     if (!node->net){
             free(node->finger_table);
             free(node);
@@ -94,6 +94,7 @@ int node_network_create(struct node_self* self)
     return 0;
 }
 
+// TODO
 int node_network_join(struct node_self* self, struct node_info node)
 {
     self->has_pred = 0; // nil
@@ -106,6 +107,7 @@ int node_network_join(struct node_self* self, struct node_info node)
 //
 
 struct node_found_cb_data{
+    struct node_self* self;
     node_found_cb_t cb;
     void* found_cb_arg;
     struct node_info node;
@@ -118,13 +120,13 @@ void node_found(evutil_socket_t fd, short what, void *arg)
     free(cb_data);
 }
 
-void node_found_remote_cb(struct bufferevent *bev, void *arg)
+void node_found_remote_cb(int connection, void *arg);
 {
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
+    struct node_self* self = cb_data->self;
 
     struct node_message msg;
-    struct evbuffer *input = bufferevent_get_input(bev);
-    struct evbuffer *output = bufferevent_get_output(bev);
+    struct evbuffer *read_buf = net_connection_get_read_buffer(self->net, connection);
     int header_len = 0;
     int line_len;
     char* endptr;
@@ -133,16 +135,21 @@ void node_found_remote_cb(struct bufferevent *bev, void *arg)
 
     //TODO parse msg properly
 
-    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     msg.from.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
 
     cb_data->node = ...
 
-    bufferevent_free(bev);
+    net_connection_close(self->srv, connection);
 
     node_found(-1, 0, cb_data)
+}
+
+node_remote_find_event(int connection, short type, void *arg)
+{
+
 }
 
 //
@@ -163,6 +170,7 @@ int node_find_successor_remote(struct node_self* self, struct node_info n, hash_
     msg.content = content;
 
     return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
+    return node_connect_and_send_message(self, &msg, node_found_remote_cb, node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
 }
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
@@ -294,9 +302,9 @@ struct finger_update_arg{
     int finger_num;
 };
 
-void finger_update(struct node_info node, void *data)
+void finger_update(struct node_info node, void *arg)
 {
-    struct finger_update_arg* fua = (struct finger_update_arg*) data;
+    struct finger_update_arg* fua = (struct finger_update_arg*) arg;
 
     fua->self->finger_table[fua->finger_num] = node;
     free(fua);
@@ -323,7 +331,28 @@ void node_fix_fingers(struct node_self* self)
     }
 }
 
-// TODO + add cb
+void node_check_predecessor_reply(int connection, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    // TODO check message is legit?
+    // struct evbuffer* rbuff = net_connection_get_read_buffer(self->net, connection);
+
+    net_connection_close(self->net, connection);
+}
+
+void node_check_predecessor_event(int connection, short type, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    if (events & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
+        if (events & (BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
+            // couldn't reach pred
+            self->has_pred = 0;
+            memset(&(node->predecessor), 0, sizeof(struct node_info));
+        }
+        net_connection_close(self->net, connection);
+    }
+}
+
 void node_check_predecessor(struct node_self* self)
 {
     if (!self->has_pred){ return; }
@@ -332,13 +361,10 @@ void node_check_predecessor(struct node_self* self)
     msg.from = self->self;
     msg.to   = node;
     msg.type = MSG_T_ALIVE_REQ;
+    msg.len  = 0;
+    msg.content = NULL;
 
-    char content[_];
-    snprintf(content, _, "", );
-    msg.len  = ;
-    msg.content = content;
-
-    node_send_message(self, msg, , );
+    node_connect_and_send_message(self, &msg, node_check_predecessor_reply, node_check_predecessor_event, (void*) self, NODE_TIMEOUT);
 }
 
 //
@@ -364,26 +390,48 @@ char* node_msg_type_str(int msg_type){
     }
 }
 
-// TODO handler needs redoing!
-int node_send_message(struct node_self* self, struct node_message* msg, bufferevent_data_cb reply_handler, void* rh_arg)
+int node_send_message(struct node_self* self, struct node_message* msg, const int connection)
 {
-    char* msg_bytes = malloc(sizeof(char) * (48 + msg->len));
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
+    if (!write_buf){
+        return -1; }
+    int rc = 0;
+
     if (msg->content != NULL){
-        snprintf(msg_bytes, 48, MSG_FMT_CONTENT, msg->from, msg->to, node_msg_type_str(msg->type), msg->len, msg->content);
+        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from, msg->to, node_msg_type_str(msg->type), msg->len, msg->content);
     }else{
-        snprintf(msg_bytes, 48, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
+        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
     }
+
+    if (rc < 0){
+        return rc
+    }
+
+    return net_connection_activate(self->net, connection);
+}
+
+
+int node_connect_and_send_message(struct node_self* self, struct node_message* msg, net_connection_data_cb_t read_cb, net_connection_event_cb_t event_cb, void *cb_arg, time_t timeout_secs)
+{
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
     if(connection < 0){
         // error creating connection
         return connection;
     }
-    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
-    evbuffer_add(write_buf, msg_bytes, (48 + msg->len));
-    net_connection_set_handlers(self->net, connection,)
+    if (timeout_secs >= 0){
+        net_connection_set_timeouts(self->net, connection, timeout_secs, timeout_secs);
+    }
+    if (read_cb){
+        net_connection_set_read_cb(self->net, connection, read_cb);
+    }
+    if (event_cb){
+        net_connection_set_event_cb(self->net, connection, event_cb);
+    }
+    if (read_cb){
+        net_connection_set_cb_arg(self->net, connection, cb_arg);
+    }
 
-    //TODO proper handlers
-    int rc = net_connection_activate(self->net, connection, reply_handler, );
+    return node_send_message(self, msg, connection);
 }
 
 struct incoming_handler_data{
@@ -396,7 +444,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
 {
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
 
-    evbuffer_add_printf(handler_data->replyto, "id:%X\nipv4:%X\nport:%X", succ.id, succ.IP, succ.port);
+    evbuffer_add_printf(handler_data->replyto, "%X\n%X\n%X\n", succ.id, succ.IP, succ.port);
 
     free(handler_data->recvd_msg);
     // TODO close connection and free buffer event at some point
@@ -419,8 +467,8 @@ void handle_message(struct node_self* self, struct node_message* message, struct
             node_find_successor(self, id, node_successor_found_for_remote, handler_data);
             break;
         case MSG_T_PRED_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
-            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (15 + (ID_BITS/4) + (32/4) + (16/4)));
-            evbuffer_add_printf(replyto, "id:%X\nipv4:%X\nport:%X", self->predecessor->id, self->predecessor->IP, self->predecessor->port);
+            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (3 + (ID_BITS/4) + (32/4) + (16/4)));
+            evbuffer_add_printf(replyto, "%X\n%X\n%X\n", self->predecessor->id, self->predecessor->IP, self->predecessor->port);
             break;
         case MSG_T_ALIVE_REQ:
             evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_ALIVE, 0);
@@ -473,13 +521,9 @@ int parse_msg_type(const char* typestr)
     }
     return -1;
 }
-// TODO
-void recv_message(struct bufferevent *bev, void *arg)
+
+int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
 {
-    struct node_self* self = (struct node_self*) arg;
-    struct node_message msg;
-    struct evbuffer *input = bufferevent_get_input(bev);
-    struct evbuffer *output = bufferevent_get_output(bev);
     int header_len = 0;
     int line_len;
 
@@ -488,33 +532,48 @@ void recv_message(struct bufferevent *bev, void *arg)
     char* token;
 
     // from id
-    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     msg.from.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
 
     // to id
-    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     msg.to.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
 
     // type of message
-    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     if (msg.type = parse_msg_type(token) == -1) {
-            return; } //TODO close connection
+            return -1; }
     header_len += line_len + 1;
     free(token);
 
     // length of content or 0 if none
-    token = evbuffer_readln(input, &line_len, EVBUFFER_EOL_LF);
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     msg.len = (int) strtoul(token, &endptr, 10);
     header_len += line_len + 1;
     free(token);
+    return 0;
+}
+
+void incoming_connection(int connection, short type, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+
+    struct node_message msg;
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+
+    if (node_parse_message_header(&msg, read_buf) < 0){
+        // error parsing msg
+        net_connection_close(self->net, connection);
+        return;
+    }
 
     if (msg.len > 0){
         msg.content = malloc(sizeof(char)*msg.len);
-        int copied = evbuffer_remove(input, msg.content, msg.len);
+        int copied = evbuffer_remove(read_buf, msg.content, msg.len);
         if (copied == -1) {
             // TODO error reading
         }
@@ -527,6 +586,7 @@ void recv_message(struct bufferevent *bev, void *arg)
 
     handle_message(self, &msg, output);
 }
+
 
 
 

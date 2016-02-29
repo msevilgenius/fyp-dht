@@ -7,6 +7,8 @@
 #define ID_BITS 32
 #define ID_HEX_CHARS (ID_BITS/4)
 #define FINGER_SIZE_INIT 6
+// wait 20 secs before timout node
+#define NODE_TIMEOUT 20
 
 struct node_self;
 
@@ -95,6 +97,7 @@ void node_alive_timeout(struct node_self* self, struct node_info* node);
 void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto);
 
 
-int node_send_message(struct node_self* self, struct node_message* message);
+int node_send_message(struct node_self* self, struct node_message* message, const int connection);
+int node_connect_and_send_message(struct node_self* self, struct node_message* message, );
 
 #endif // DHT_H

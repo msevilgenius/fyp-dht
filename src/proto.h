@@ -4,6 +4,14 @@
 #define MSG_FMT "%X\n%X\n%s\n%d\n"
 #define MSG_FMT_CONTENT "%X\n%X\n%s\n%d\n%s"
 
+/* msg body node data : "%X\n%X\n%X\n"
+
+IDXXXXXX
+IPXXXXXX
+PORT
+
+*/
+
 /*
 find_successor:
 req: find successor id
