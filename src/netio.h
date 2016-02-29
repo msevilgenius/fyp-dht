@@ -9,7 +9,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
-#define MAX_OUTGOING_CONNS 64
+#define MAX_OPEN_CONNECTIONS 256
 
 struct net_connection;
 

@@ -17,7 +17,7 @@ struct net_connection{
 struct net_server{
     struct event_base *base;
     struct evconnlistener *listener_evt;
-    struct net_connection connections[MAX_OUTGOING_CONNS];
+    struct net_connection connections[MAX_OPEN_CONNECTIONS];
     pthread_mutex_t connections_lock;
     net_connection_event_cb_t incoming_handler;
     void* incoming_handler_arg;
@@ -34,14 +34,14 @@ struct net_conn_cb_arg{
 
 int net_valid_connection_num(int connection)
 {
-    return (connection < 0 || connection >= MAX_OUTGOING_CONNS);
+    return (connection < 0 || connection >= MAX_OPEN_CONNECTIONS);
 }
 
 // must use locks with this!!!
 int net_empty_connection_slot(struct net_server* srv)
 {
     int conn = -1;
-    for(int i = 0; i < MAX_OUTGOING_CONNS; ++i){
+    for(int i = 0; i < MAX_OPEN_CONNECTIONS; ++i){
         if (srv->connections[i].bev == NULL){
             conn = i;
             break;
@@ -141,7 +141,7 @@ struct net_server* net_server_create(uint16_t port, net_connection_event_cb_t in
 void net_server_destroy(struct net_server* srv)
 {
     if(srv){
-        for(int i = 0; i < MAX_OUTGOING_CONNS; ++i){
+        for(int i = 0; i < MAX_OPEN_CONNECTIONS; ++i){
             net_connection_close(srv, i);
         }
         evconnlistener_disable(srv->listener_evt);
