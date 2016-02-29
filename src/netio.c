@@ -93,7 +93,7 @@ void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
 // server_ creation etc.
 //
 
-struct net_server* net_server_create(uint16_t port, net_connection_event_cb_t incoming_connection_cb, void* incoming_cb_arg)
+struct net_server* net_server_create(const uint16_t port, net_connection_event_cb_t incoming_connection_cb, void* incoming_cb_arg)
 {
     struct net_server *srv;
     struct sockaddr_in serv_addr; //socket address to bind to
@@ -210,7 +210,7 @@ int net_server_run(struct net_server* srv)
 // connection management
 //
 
-int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
+int net_create_connection(struct net_server* srv, const uint32_t IP, const uint16_t port)
 {
     struct event_base *base = srv->base;
 
@@ -252,7 +252,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     return conn;
 }
 
-void net_connection_close(struct net_server* srv, int conn)
+void net_connection_close(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
         struct bufferevent *bev = srv->connections[conn].bev;
@@ -269,7 +269,7 @@ void net_connection_close(struct net_server* srv, int conn)
     }
 }
 
-int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb)
+int net_connection_set_read_cb(struct net_server* srv, const int conn, net_connection_data_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].read_cb = cb;
@@ -278,7 +278,7 @@ int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_
     return -1;
 }
 
-int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb)
+int net_connection_set_write_cb(struct net_server* srv, const int conn, net_connection_data_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].write_cb = cb;
@@ -287,7 +287,7 @@ int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection
     return -1;
 }
 
-int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection_event_cb_t cb)
+int net_connection_set_event_cb(struct net_server* srv, const int conn, net_connection_event_cb_t cb)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].evt_cb = cb;
@@ -296,7 +296,7 @@ int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection
     return -1;
 }
 
-int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg)
+int net_connection_set_cb_arg(struct net_server* srv, const int conn, void *cb_arg)
 {
     if (net_valid_connection_num(conn)){
         srv->connections[conn].upper_cb_arg = cb_arg;
@@ -305,7 +305,7 @@ int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg)
     return -1;
 }
 
-void* net_connection_get_cb_arg(struct net_server* srv, int conn)
+void* net_connection_get_cb_arg(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
         return srv->connections[conn].upper_cb_arg;
@@ -313,7 +313,7 @@ void* net_connection_get_cb_arg(struct net_server* srv, int conn)
     return NULL;
 }
 
-void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t_secs, time_t write_t_secs)
+void net_connection_set_timeouts(struct net_server* srv, const int conn, const time_t read_t_secs, const time_t write_t_secs)
 {
     if (!net_valid_connection_num(conn)){
         return; }
@@ -325,7 +325,7 @@ void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t
     bufferevent_set_timeouts(srv->connections[conn].bev, &read_to, &write_to);
 }
 
-int net_connection_activate(struct net_server* srv, int conn)
+int net_connection_activate(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
 
@@ -342,7 +342,7 @@ int net_connection_activate(struct net_server* srv, int conn)
     return -1;
 }
 
-struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int conn)
+struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
         return bufferevent_get_input(srv->connections[conn].bev);
@@ -350,7 +350,7 @@ struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int conn
     return NULL;
 };
 
-struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, int conn)
+struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
         return bufferevent_get_output(srv->connections[conn].bev);
