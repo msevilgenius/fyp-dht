@@ -29,7 +29,7 @@ int net_server_run(struct net_server* srv);
 
 struct event_base* net_get_base(struct net_server* srv);
 
-int net_valid_connection_num(int connection);
+int net_valid_connection_num(int conn);
 
 /*
  * initialise a connection to another node/server (doesn't actually connect)
@@ -40,38 +40,38 @@ int net_connection_create(struct net_server* srv, uint32_t IP, uint16_t port);
 /*
  * close a connection to another node/server
  */
-int net_connection_close(struct net_server* srv, int connection);
+void net_connection_close(struct net_server* srv, int conn);
 
 /*
  * set handlers for read available, connection timeout, disconnection?
  */
-int net_connection_set_read_cb(struct net_server* srv, int connection, net_connection_data_cb_t cb);
+int net_connection_set_read_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb);
 
-int net_connection_set_write_cb(struct net_server* srv, int connection, net_connection_data_cb_t cb);
+int net_connection_set_write_cb(struct net_server* srv, int conn, net_connection_data_cb_t cb);
 
-int net_connection_set_event_cb(struct net_server* srv, int connection, net_connection_event_cb_t cb);
+int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection_event_cb_t cb);
 
-int net_connection_set_cb_arg(struct net_server* srv, int connection, void *cb_arg);
+int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg);
 
-void* net_connection_get_cb_arg(struct net_server* srv, int connection);
+void* net_connection_get_cb_arg(struct net_server* srv, int conn);
 
-void net_connection_set_timeouts(struct net_server* srv, int connection, time_t read_t_secs, time_t write_t_secs);
+void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t_secs, time_t write_t_secs);
 
 /*
  * actually open connection and begin I/O
  * for outgoing connections it is best to add message to write buffer then activating
  */
-int net_connection_activate(struct net_server* srv, int connection);
+int net_connection_activate(struct net_server* srv, int conn);
 
 /*
  * gets the connection's read buffer (contains data sent to this connection from remote)
  */
-struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int connection);
+struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, int conn);
 
 /*
  * gets the connection's read buffer (contains data sent to this connection from remote)
  */
-struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, int connection);
+struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, int conn);
 
 
 static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,

@@ -117,7 +117,7 @@ struct net_server* net_server_create(uint16_t port, net_connection_event_cb_t in
     }
 
     srv->incoming_handler = incoming_connection_cb;
-    srv->incoming_cb_arg = incoming_cb_arg;
+    srv->incoming_handler_arg = incoming_cb_arg;
 
     srv->listener_evt = evconnlistener_new_bind(srv->base, listen_evt_cb, (void*) srv,
                                 LEV_OPT_CLOSE_ON_FREE, -1,
@@ -191,7 +191,7 @@ static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
     srv->connections[conn].net_cb_arg->conn = conn;
     srv->connections[conn].net_cb_arg->srv = srv;
 
-    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb_t, srv->connections[conn].net_cb_arg);
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
@@ -299,7 +299,7 @@ int net_connection_set_event_cb(struct net_server* srv, int conn, net_connection
 int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg)
 {
     if (net_valid_connection_num(conn)){
-        srv->connections[conn].cb_arg = cb_arg;
+        srv->connections[conn].upper_cb_arg = cb_arg;
         return 0;
     }
     return -1;
@@ -308,7 +308,7 @@ int net_connection_set_cb_arg(struct net_server* srv, int conn, void *cb_arg)
 void* net_connection_get_cb_arg(struct net_server* srv, int conn)
 {
     if (net_valid_connection_num(conn)){
-        return srv->connections[conn].cb_arg;
+        return srv->connections[conn].upper_cb_arg;
     }
     return NULL;
 }
@@ -322,7 +322,7 @@ void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t
     struct timeval write_to;
     read_to.tv_sec = read_t_secs;
     write_to.tv_sec = write_t_secs;
-    bufferevent_set_timeouts(srv->connections[conn], &read_to, &write_to);
+    bufferevent_set_timeouts(&(srv->connections[conn]), &read_to, &write_to);
 }
 
 int net_connection_activate(struct net_server* srv, int conn)
