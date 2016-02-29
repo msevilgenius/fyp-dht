@@ -246,7 +246,7 @@ int net_create_connection(struct net_server* srv, uint32_t IP, uint16_t port)
     }
     srv->connections[conn].net_cb_arg->conn = conn;
     srv->connections[conn].net_cb_arg->srv = srv;
-    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb_t, srv->connections[conn].net_cb_arg);
+    bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
     return conn;
@@ -322,7 +322,7 @@ void net_connection_set_timeouts(struct net_server* srv, int conn, time_t read_t
     struct timeval write_to;
     read_to.tv_sec = read_t_secs;
     write_to.tv_sec = write_t_secs;
-    bufferevent_set_timeouts(&(srv->connections[conn]), &read_to, &write_to);
+    bufferevent_set_timeouts(srv->connections[conn].bev, &read_to, &write_to);
 }
 
 int net_connection_activate(struct net_server* srv, int conn)
