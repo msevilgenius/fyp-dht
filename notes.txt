@@ -32,6 +32,16 @@ setup:
 
 
 
+pred request:
+reply:
+    OK
+    id
+    ip
+    port
+    
+or
+    NONE
+
 
 
 

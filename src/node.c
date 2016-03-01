@@ -436,56 +436,86 @@ int node_connect_and_send_message(struct node_self* self, struct node_message* m
 
 struct incoming_handler_data{
     struct node_self* self;
-    struct evbuffer* replyto;
-    struct node_message* recvd_msg;
+    int connection;
 };
 
 void node_successor_found_for_remote(struct node_info succ, void *data)
 {
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
+    struct evbuffer* write_buf = net_connection_get_write_buffer(handler_data->self->net, handler_data->connection);
 
-    evbuffer_add_printf(handler_data->replyto, "%X\n%X\n%X\n", succ.id, succ.IP, succ.port);
+    evbuffer_add_printf(write_buf, "%X\n%X\n%X\n", succ.id, succ.IP, succ.port);
 
-    free(handler_data->recvd_msg);
-    // TODO close connection and free buffer event at some point
     free(handler_data);
 }
 
-// TODO
-void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto)
+void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
 {
     struct incoming_handler_data *handler_data;
+    handler_data = malloc(sizeof(struct incoming_handler_data));
+    handler_data->self = self;
+    handler_data->connection = connection;
+    node_find_successor(self, r_id, node_successor_found_for_remote, handler_data);
+}
+
+void handle_pred_request(struct node_self* self, int connection)
+{
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
+    if (self->has_pred){
+        evbuffer_add_printf(write_buf, "OK\n%X\n%X\n%X\n", self->predecessor.id, self->predecessor.IP, self->predecessor.port);
+    }else{
+        evbuffer_add(write_buf, "NONE\n", 5);
+    }
+}
+
+void handle_alive_request(struct node_self* self, int connection)
+{
+    struct evbuffer* write_buf = net_connection_get_write_buffer(elf->net, connection);
+    evbuffer_add(write_buf, "ALIVE\n", 6);
+}
+
+// TODO
+void handle_message(struct node_self* self, struct node_message* message, int connection)
+{
+
+    // for parsing msg body
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+    char* endptr;
+    char* saveptr;
+    char* token;
+    int read_len
+    hash_type r_id;
     struct node_info other;
+
     switch (msg->type){
 
         case MSG_T_SUCC_REQ:
-            handler_data = malloc(sizeof(struct incoming_handler_data));
-            handler_data->self = self;
-            handler_data->recvd_msg = message;
-            handler_data->replyto = replyto;
-            // TODO get id
-            node_find_successor(self, id, node_successor_found_for_remote, handler_data);
+            token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+            r_id = strtoull(token, &endptr, 16);
+            free(token);
+            handle_succ_request(self, connection, r_id);
             break;
-        case MSG_T_PRED_REQ:                                                         // chars + ID + IP + PORT (numbers in hex)
-            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_PREDECESSOR, (3 + (ID_BITS/4) + (32/4) + (16/4)));
-            evbuffer_add_printf(replyto, "%X\n%X\n%X\n", self->predecessor->id, self->predecessor->IP, self->predecessor->port);
+
+        case MSG_T_PRED_REQ:
+            handle_pred_request(self, connection);
             break;
+
         case MSG_T_ALIVE_REQ:
-            evbuffer_add_printf(replyto, MSG_FMT, msg->to, msg->from, RESP_ALIVE, 0);
+            handle_alive_request(self, connection);
             break;
+
         case MSG_T_NOTIF:
             other.id = message->from;
-            // TODO parse content -> other
+            // TODO
+            net_connection_get_remote_address
             node_notified(self, other);
             break;
 
+
+
         case MSG_T_SUCC_REP:
-            other.id = message->from;
-            // TODO parse content -> other
             break;
         case MSG_T_PRED_REP:
-            other.id = message->from;
-            // TODO parse content -> other
             break;
         case MSG_T_ALIVE_REP:
             break;
@@ -558,7 +588,16 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
     return 0;
 }
 
-void incoming_connection(int connection, short type, void *arg)
+void incoming_event_cb(int connection, short type, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    if (type & (BEV_ERROR|BEV_EVENT_EOF)){
+        net_connection_close(self->net, connection);
+    }
+}
+
+
+void incoming_read_cb(int connection, void *arg)
 {
     struct node_self* self = (struct node_self*) arg;
 
@@ -584,7 +623,16 @@ void incoming_connection(int connection, short type, void *arg)
         msg.content = NULL;
     }
 
-    handle_message(self, &msg, output);
+    handle_message(self, &msg, connection);
+}
+
+void incoming_connection(int connection, short type, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    net_connection_set_read_cb(self->net, connection, incoming_read_cb);
+    net_connection_set_event_cb(self->net, connection, incoming_event_cb);
+    net_connection_set_cb_arg(self->net, connection, (void*)self);
+    net_connection_set_timeouts(self->net, connection, 20, 20);
 }
 
 

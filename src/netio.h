@@ -73,6 +73,8 @@ struct evbuffer* net_connection_get_read_buffer(struct net_server* srv, const in
  */
 struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, const int conn);
 
+int net_connection_get_remote_address(struct net_server* srv, const int conn, )
+
 
 static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg);
