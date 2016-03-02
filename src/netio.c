@@ -358,7 +358,21 @@ struct evbuffer* net_connection_get_write_buffer(struct net_server* srv, const i
     return NULL;
 };
 
+uint32_t net_connection_get_remote_address(struct net_server* srv, const int conn)
+{
+    if (net_valid_connection_num(conn)){
 
+        struct sockaddr addr;
+        struct sockaddr_in* s = (struct sockaddr_in*)(&addr);
+        socklen_t len = sizeof(addr);
+
+        int fd = bufferevent_getfd(srv->connections[conn].bev);
+
+        int rc = getpeername(socketFD , &addr , &len);
+        return ntohl(s->sin_addr.s_addr);
+    }
+    return 0;
+}
 
 
 
