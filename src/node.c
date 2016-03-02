@@ -13,6 +13,7 @@
 #define MSG_T_PRED_REQ  5
 #define MSG_T_ALIVE_REP 6
 #define MSG_T_ALIVE_REQ 7
+#define MSG_T_UNKNOWN (-1)
 
 
 struct node_found_cb_data;
@@ -181,14 +182,21 @@ void node_found_remote_cb(int connection, void *arg);
     char* token;
 
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    // TODO this may be "NONE" in the case of  get predecessor
+    endptr = NULL;
     cb_data->node.id = strtoull(token, &endptr, 16);
     free(token);
 
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    endptr = NULL;
+    cb_data->node.IP = strtoull(token, &endptr, 16);
+    free(token);
+    //cb_data->node.IP = net_connection_get_remote_address(self->net, connection);
+
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    endptr = NULL;
     cb_data->node.port = strtoull(token, &endptr, 16);
     free(token);
-
-    cb_data->node.IP = net_connection_get_remote_address(aeld->net, connection);
 
     net_connection_close(self->srv, connection);
 
@@ -269,9 +277,9 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info* n, no
     msg.to   = n;
     msg.type = MSG_T_PRED_REQ;
 
-    char content[(ID_BITS/4) + 1];
-    snprintf(content, (ID_BITS/4) + 1, "%X", id);
-    msg.len  = ID_BITS/4;
+    char content[(ID_BITS/4) + 2];
+    snprintf(content, (ID_BITS/4) + 2, "%X\n", id);
+    msg.len  = ID_BITS/4 + 1;
     msg.content = content;
 
     cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -339,7 +347,7 @@ void node_notify_node(struct node_self* self, struct node_info* node)
 
 void node_notified(struct node_self* self, struct node_info node)
 {
-    if (!self->has_pred || node_id_in_range(node->id, self->predecessor, self->self->id)){
+    if (!self->has_pred || node_id_in_range(node->id, self->predecessor->id, self->self->id)){
         self->predecessor = node;
         self->has_pred = 1;
     }
@@ -386,9 +394,21 @@ void node_fix_fingers(struct node_self* self)
 void node_check_predecessor_reply(int connection, void *arg)
 {
     struct node_self* self = (struct node_self*) arg;
-    // TODO check message is legit?
-    // struct evbuffer* rbuff = net_connection_get_read_buffer(self->net, connection);
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 
+    int line_len;
+    char* endptr;
+    char* token;
+
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    if (!strncmp(token, "ALIVE", 5)){
+        // HOORAY
+    }else{
+        // couldn't reach pred
+        self->has_pred = 0;
+        memset(&(node->predecessor), 0, sizeof(struct node_info));
+    }
+    free(token);
     net_connection_close(self->net, connection);
 }
 
@@ -411,7 +431,7 @@ void node_check_predecessor(struct node_self* self)
 
     struct node_message msg;
     msg.from = self->self;
-    msg.to   = node;
+    msg.to   = self->predecessor;
     msg.type = MSG_T_ALIVE_REQ;
     msg.len  = 0;
     msg.content = NULL;
@@ -543,6 +563,7 @@ void handle_message(struct node_self* self, struct node_message* message, int co
 
         case MSG_T_SUCC_REQ:
             token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+            endptr = NULL;
             r_id = strtoull(token, &endptr, 16);
             free(token);
             handle_succ_request(self, connection, r_id);
@@ -557,9 +578,18 @@ void handle_message(struct node_self* self, struct node_message* message, int co
             break;
 
         case MSG_T_NOTIF:
-            other.id = message->from;
-            // TODO
-            net_connection_get_remote_address
+            // TODO close
+            token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+            endptr = NULL;
+            other.id = strtoull(token, &endptr, 16);
+            free(token);
+
+            token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+            endptr = NULL;
+            other.port = strtoull(token, &endptr, 16);
+            free(token);
+
+            other.IP = net_connection_get_remote_address(aeld->net, connection);
             node_notified(self, other);
             break;
 
@@ -601,7 +631,7 @@ int parse_msg_type(const char* typestr)
     if (strcmp(typestr, REQ_NOTIFY) == 0){
         return MSG_T_NOTIF;
     }
-    return -1;
+    return MSG_T_UNKNOWN;
 }
 
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
@@ -627,7 +657,7 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
 
     // type of message
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    if (msg.type = parse_msg_type(token) == -1) {
+    if (msg.type = parse_msg_type(token) == MSG_T_UNKNOWN) {
             return -1; }
     header_len += line_len + 1;
     free(token);
@@ -661,7 +691,7 @@ void incoming_read_cb(int connection, void *arg)
         net_connection_close(self->net, connection);
         return;
     }
-
+/*
     if (msg.len > 0){
         msg.content = malloc(sizeof(char)*msg.len);
         int copied = evbuffer_remove(read_buf, msg.content, msg.len);
@@ -674,7 +704,7 @@ void incoming_read_cb(int connection, void *arg)
     }else{
         msg.content = NULL;
     }
-
+*/
     handle_message(self, &msg, connection);
 }
 
@@ -684,7 +714,7 @@ void incoming_connection(int connection, short type, void *arg)
     net_connection_set_read_cb(self->net, connection, incoming_read_cb);
     net_connection_set_event_cb(self->net, connection, incoming_event_cb);
     net_connection_set_cb_arg(self->net, connection, (void*)self);
-    net_connection_set_timeouts(self->net, connection, 20, 20);
+    net_connection_set_timeouts(self->net, connection, NODE_TIMEOUT, NODE_TIMEOUT);
 }
 
 
