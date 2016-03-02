@@ -546,7 +546,6 @@ void handle_alive_request(struct node_self* self, int connection)
     evbuffer_add(write_buf, "ALIVE\n", 6);
 }
 
-// TODO
 void handle_message(struct node_self* self, struct node_message* message, int connection)
 {
 
@@ -578,7 +577,6 @@ void handle_message(struct node_self* self, struct node_message* message, int co
             break;
 
         case MSG_T_NOTIF:
-            // TODO close
             token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
             endptr = NULL;
             other.id = strtoull(token, &endptr, 16);
@@ -589,8 +587,9 @@ void handle_message(struct node_self* self, struct node_message* message, int co
             other.port = strtoull(token, &endptr, 16);
             free(token);
 
-            other.IP = net_connection_get_remote_address(aeld->net, connection);
+            other.IP = net_connection_get_remote_address(self->net, connection);
             node_notified(self, other);
+            net_connection_close(self->net, connection);
             break;
 
 
@@ -607,7 +606,7 @@ void handle_message(struct node_self* self, struct node_message* message, int co
         free(msg->content);}
     return;
 }
-// TODO
+
 int parse_msg_type(const char* typestr)
 {
     if (strcmp(typestr, REQ_SUCCESSOR) == 0){
