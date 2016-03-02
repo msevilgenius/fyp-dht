@@ -210,7 +210,7 @@ int net_server_run(struct net_server* srv)
 // connection management
 //
 
-int net_create_connection(struct net_server* srv, const uint32_t IP, const uint16_t port)
+int net_connection_create(struct net_server* srv, const uint32_t IP, const uint16_t port)
 {
     struct event_base *base = srv->base;
 
