@@ -1,6 +1,7 @@
 #include "node.h"
 #include "netio.h"
 #include "proto.h"
+#include "libdht.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -14,7 +15,6 @@
 #define MSG_T_ALIVE_REQ 7
 
 struct node_self{
-    hash_type id;
     struct node_info self;
     struct node_info successor;
     struct node_info predecessor;
@@ -49,12 +49,14 @@ int node_id_in_range(hash_type id, hash_type min, hash_type max)
 // node creation and cleanup
 //
 
-struct node_self* node_create(int listen_port)
+struct node_self* node_create(uint16_t listen_port, char* name)
 {
     struct node_self* node = malloc(sizeof(struct node_self));
     if(!node) { return NULL; }
 
-    node->id = 0;
+    node->self.id = get_id(name);
+    node->self.port = listen_port;
+    node->self.IP = 0x7F000001; // (127.0.0.1)
     memset(&(node->predecessor), 0, sizeof(struct node_info));
     memset(&(node->successor), 0, sizeof(struct node_info));
 
@@ -86,7 +88,7 @@ void node_destroy(struct node_self* n)
 
 int node_network_create(struct node_self* self)
 {
-    self->predecessor = self->id;
+    self->predecessor = self->self->id;
     self->has_pred = 1;
 
     int rv = net_server_run(self->net);
@@ -98,7 +100,7 @@ int node_network_create(struct node_self* self)
 int node_network_join(struct node_self* self, struct node_info node)
 {
     self->has_pred = 0; // nil
-    self->successor = node_find_successor_remote(self, node, self->id);
+    self->successor = node_find_successor_remote(self, node, self->self->id);
     return 0;
 }
 
@@ -130,17 +132,17 @@ void node_found_remote_cb(int connection, void *arg);
     int header_len = 0;
     int line_len;
     char* endptr;
-    char* saveptr;
     char* token;
 
-    //TODO parse msg properly
-
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg.from.id = strtoull(token, &endptr, 16);
-    header_len += line_len + 1;
+    cb_data->node.id = strtoull(token, &endptr, 16);
     free(token);
 
-    cb_data->node = ...
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    cb_data->node.port = strtoull(token, &endptr, 16);
+    free(token);
+
+    cb_data->node.IP = net_connection_get_remote_address(aeld->net, connection);
 
     net_connection_close(self->srv, connection);
 
@@ -177,7 +179,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
 {
     struct node_found_cb_data *cb_data;
     int rv = -1;
-    if (node_id_compare(self->id, id) == 0){ // id is my id
+    if (node_id_compare(self->self->id, id) == 0){ // id is my id
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
             cb_data->cb           = cb;
@@ -190,7 +192,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             };
     }
     else
-    if(node_id_in_range(id, self->id, self->successor.id)){ // id is between me and my successor
+    if(node_id_in_range(id, self->self->id, self->successor.id)){ // id is between me and my successor
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
             cb_data->cb           = cb
@@ -237,7 +239,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 {
     for (hash_type i = ID_BITS-1; i >= 0; --i){
         struct node_info n = self->finger_table[i];
-        if (node_id_in_range(n->id, self->id, id)){
+        if (node_id_in_range(n->id, self->self->id, id)){
             return (n);
         }
     }
@@ -257,7 +259,7 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
 
     }else
     // if (me < s->p < s) then update me->s
-    if (node_id_in_range(succ.id, self->id, self->successor.id)){
+    if (node_id_in_range(succ.id, self->self->id, self->successor.id)){
         self->successor = succ;
     }
     // notify s
@@ -268,7 +270,12 @@ void node_network_stabalize(struct node_self* self)
 {
     node_get_predecessor_remote(self, self->successor, node_stabilize_sp_found, self);
 }
+
 // TODO
+void node_notify_rep_event(int connection, short type, void *arg){
+
+}
+
 void node_notify_node(struct node_self* self, struct node_info* node)
 {
     struct node_message msg;
@@ -276,18 +283,17 @@ void node_notify_node(struct node_self* self, struct node_info* node)
     msg.to   = node;
     msg.type = MSG_T_NOTIF;
 
-    char content[_];
-    snprintf(content, _, "", );
-    msg.len  = ;
+    char content[ID_HEX_CHARS + 1 + (16/4) + 1 + 1];
+    snprintf(content, "%08X\n%04X\n", self->self->id, self->self->port);
+    msg.len = ID_HEX_CHARS + 1 + (16/4) + 1;
     msg.content = content;
 
-    // TODO callback to close & free connection
-    node_send_message(self, msg, null, null);
+    node_connect_and_send_message(self, &msg, null, node_notify_rep_event, (void*)self, NODE_TIMEOUT)
 }
 
 void node_notified(struct node_self* self, struct node_info node)
 {
-    if (!self->has_pred || node_id_in_range(node->id, self->predecessor, self->id)){
+    if (!self->has_pred || node_id_in_range(node->id, self->predecessor, self->self->id)){
         self->predecessor = node;
         self->has_pred = 1;
     }
@@ -315,7 +321,7 @@ void node_fix_a_finger(struct node_self* self, int finger_num)
     if (finger_num >= ID_BITS || finger_num < 0){
         return; }// non-existent finger
 
-    hash_type finger_id = self->id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
+    hash_type finger_id = self->self->id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
 
     struct finger_update_arg* fua = malloc(sizeof(struct finger_update_arg));
     fua->finger_num = finger_num;
