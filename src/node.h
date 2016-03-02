@@ -36,14 +36,14 @@ void node_destroy(struct node_self* n);
  * creates a new overlay network
  *
  */
-int node_network_create(struct node_self* self);
+int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg);
 
 
 /**
  * join an existing overlay network
  *
  */
-int node_network_join(struct node_self* self, struct node_info* node);
+int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg);
 
 /**
  * find successor of id

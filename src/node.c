@@ -14,6 +14,9 @@
 #define MSG_T_ALIVE_REP 6
 #define MSG_T_ALIVE_REQ 7
 
+
+struct node_found_cb_data;
+
 struct node_self{
     struct node_info self;
     struct node_info successor;
@@ -86,22 +89,65 @@ void node_destroy(struct node_self* n)
 // node network join/create
 //
 
-int node_network_create(struct node_self* self)
+typedef void (*on_join_cb_t)(void* arg)
+
+struct node_join_cb_data{
+    joined_cb
+    void *joined_cb_arg
+    struct node_self* self
+};
+
+void node_network_joined(evutil_socket_t fd, short what, void *arg)
+{
+    struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
+    cb_data->joined_cb(cb_data->joined_cb_arg);
+
+    //TODO setup stabilisation timeout cbs
+    struct node_self* self = cb_data->self;
+
+
+    free(cb_data);
+}
+
+int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 {
     self->predecessor = self->self->id;
     self->has_pred = 1;
 
-    int rv = net_server_run(self->net);
-    if (rv) return -1;
-    return 0;
+    struct node_join_cb_data* cb_data = malloc(sizeof(struct node_join_cb_data));
+
+    cb_data->joined_cb = join_cb;
+    cb_data->joined_cb_arg = cb_arg;
+
+    event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
+
+    return net_server_run(self->net);
 }
 
-// TODO
-int node_network_join(struct node_self* self, struct node_info node)
+
+void node_network_join_succ_found(struct node_info succ, void *arg);
 {
+    self->successor = succ;
+    struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
+
+    event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
+}
+
+
+int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg)
+{
+    struct node_found_cb_data* cb_data = malloc(sizeof(struct node_found_cb_data));
+    struct node_join_cb_data* cb_cb_data = malloc(sizeof(struct node_join_cb_data));
+
+    cb_cb_data->joined_cb = join_cb;
+    cb_cb_data->joined_cb_arg = cb_arg;
+
+    cb_data->self = self;
+    cb_data->found_cb_arg = cb_cb_data;
+    cb_data->cb = node_network_join_succ_found;
     self->has_pred = 0; // nil
-    self->successor = node_find_successor_remote(self, node, self->self->id);
-    return 0;
+    node_find_successor_remote(struct node_self* self, node, self->self->id, cb_data)
+    return net_server_run(self->net);
 }
 
 //
