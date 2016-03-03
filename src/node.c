@@ -1,10 +1,10 @@
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
 #include "node.h"
 #include "netio.h"
 #include "proto.h"
-#include "libdht.h"
-
-#include <string.h>
-#include <stdlib.h>
 
 #define MSG_T_NOTIF     1
 #define MSG_T_SUCC_REP  2
@@ -25,6 +25,29 @@ struct node_self{
     short has_pred;
     struct node_info* finger_table;
     struct net_server* net;
+};
+
+struct node_join_cb_data{
+    on_join_cb_t joined_cb;
+    void *joined_cb_arg;
+    struct node_self* self;
+};
+
+struct node_found_cb_data{
+    struct node_self* self;
+    node_found_cb_t cb;
+    void* found_cb_arg;
+    struct node_info node;
+};
+
+struct finger_update_arg{
+    struct node_self* self;
+    int finger_num;
+};
+
+struct incoming_handler_data{
+    struct node_self* self;
+    int connection;
 };
 
 //
@@ -52,6 +75,8 @@ int node_id_in_range(hash_type id, hash_type min, hash_type max)
 //
 // node creation and cleanup
 //
+
+void incoming_connection(int connection, short type, void *arg);
 
 struct node_self* node_create(uint16_t listen_port, char* name)
 {
@@ -90,13 +115,7 @@ void node_destroy(struct node_self* n)
 // node network join/create
 //
 
-typedef void (*on_join_cb_t)(void* arg)
 
-struct node_join_cb_data{
-    joined_cb
-    void *joined_cb_arg
-    struct node_self* self
-};
 
 void node_network_joined(evutil_socket_t fd, short what, void *arg)
 {
@@ -112,28 +131,26 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 {
-    self->predecessor = self->self->id;
+    self->predecessor = self->self;
     self->has_pred = 1;
 
     struct node_join_cb_data* cb_data = malloc(sizeof(struct node_join_cb_data));
 
     cb_data->joined_cb = join_cb;
-    cb_data->joined_cb_arg = cb_arg;
+    cb_data->joined_cb_arg = arg;
 
     event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
 
     return net_server_run(self->net);
 }
 
-
-void node_network_join_succ_found(struct node_info succ, void *arg);
+void node_network_join_succ_found(struct node_info succ, void *arg)
 {
     self->successor = succ;
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
 
     event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
 }
-
 
 int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg)
 {
@@ -147,7 +164,7 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
     cb_data->found_cb_arg = cb_cb_data;
     cb_data->cb = node_network_join_succ_found;
     self->has_pred = 0; // nil
-    node_find_successor_remote(struct node_self* self, node, self->self->id, cb_data)
+    node_find_successor_remote(self, node, self->self.id, cb_data);
     return net_server_run(self->net);
 }
 
@@ -155,12 +172,6 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
 // callbacks for when node is found
 //
 
-struct node_found_cb_data{
-    struct node_self* self;
-    node_found_cb_t cb;
-    void* found_cb_arg;
-    struct node_info node;
-};
 
 void node_found(evutil_socket_t fd, short what, void *arg)
 {
@@ -169,7 +180,7 @@ void node_found(evutil_socket_t fd, short what, void *arg)
     free(cb_data);
 }
 
-void node_found_remote_cb(int connection, void *arg);
+void node_found_remote_cb(int connection, void *arg)
 {
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     struct node_self* self = cb_data->self;
@@ -198,9 +209,9 @@ void node_found_remote_cb(int connection, void *arg);
     cb_data->node.port = strtoull(token, &endptr, 16);
     free(token);
 
-    net_connection_close(self->srv, connection);
+    net_connection_close(self->net, connection);
 
-    node_found(-1, 0, cb_data)
+    node_found(-1, 0, cb_data);
 }
 
 node_remote_find_event(int connection, short type, void *arg)
@@ -225,7 +236,6 @@ int node_find_successor_remote(struct node_self* self, struct node_info n, hash_
     msg.len  = ID_BITS/4;
     msg.content = content;
 
-    return node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
     return node_connect_and_send_message(self, &msg, node_found_remote_cb, node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
 }
 
@@ -233,7 +243,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
 {
     struct node_found_cb_data *cb_data;
     int rv = -1;
-    if (node_id_compare(self->self->id, id) == 0){ // id is my id
+    if (node_id_compare(self->self.id, id) == 0){ // id is my id
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
             cb_data->cb           = cb;
@@ -246,10 +256,10 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             };
     }
     else
-    if(node_id_in_range(id, self->self->id, self->successor.id)){ // id is between me and my successor
+    if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
-            cb_data->cb           = cb
+            cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
             cb_data->node         = self->successor;
 
@@ -262,7 +272,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         struct node_info n = node_closest_preceding_node(self, id); // node to ask
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
-        cb_data->cb           = cb
+        cb_data->cb           = cb;
         cb_data->found_cb_arg = found_cb_arg;
 
         return node_find_successor_remote(self, n, id, cb_data);
@@ -270,30 +280,30 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
     return 0;
 }
 
-void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb_t cb, void* found_cb_arg)
+void node_get_predecessor_remote(struct node_self* self, struct node_info n, node_found_cb_t cb, void* found_cb_arg)
 {
+    struct node_found_cb_data* cb_data;
     struct node_message msg;
     msg.from = self->self;
     msg.to   = n;
     msg.type = MSG_T_PRED_REQ;
 
-    char content[(ID_BITS/4) + 2];
-    snprintf(content, (ID_BITS/4) + 2, "%X\n", id);
-    msg.len  = ID_BITS/4 + 1;
-    msg.content = content;
+    msg.len  = 0;
+    msg.content = NULL;
 
     cb_data = malloc(sizeof(struct node_found_cb_data));
-    cb_data->cb           = cb
+    cb_data->cb           = cb;
     cb_data->found_cb_arg = found_cb_arg;
 
+    // TODO
     node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
 {
-    for (hash_type i = ID_BITS-1; i >= 0; --i){
+    for (hash_type i = ID_BITS-1; i > 0; --i){
         struct node_info n = self->finger_table[i];
-        if (node_id_in_range(n->id, self->self->id, id)){
+        if (node_id_in_range(n.id, self->self.id, id)){
             return (n);
         }
     }
@@ -313,7 +323,7 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
 
     }else
     // if (me < s->p < s) then update me->s
-    if (node_id_in_range(succ.id, self->self->id, self->successor.id)){
+    if (node_id_in_range(succ.id, self->self.id, self->successor.id)){
         self->successor = succ;
     }
     // notify s
@@ -330,7 +340,7 @@ void node_notify_rep_event(int connection, short type, void *arg){
 
 }
 
-void node_notify_node(struct node_self* self, struct node_info* node)
+void node_notify_node(struct node_self* self, struct node_info node)
 {
     struct node_message msg;
     msg.from = self->self;
@@ -338,16 +348,16 @@ void node_notify_node(struct node_self* self, struct node_info* node)
     msg.type = MSG_T_NOTIF;
 
     char content[ID_HEX_CHARS + 1 + (16/4) + 1 + 1];
-    snprintf(content, "%08X\n%04X\n", self->self->id, self->self->port);
+    snprintf(content, "%08X\n%04X\n", self->self.id, self->self.port);
     msg.len = ID_HEX_CHARS + 1 + (16/4) + 1;
     msg.content = content;
 
-    node_connect_and_send_message(self, &msg, null, node_notify_rep_event, (void*)self, NODE_TIMEOUT)
+    node_connect_and_send_message(self, &msg, NULL, node_notify_rep_event, (void*)self, NODE_TIMEOUT);
 }
 
 void node_notified(struct node_self* self, struct node_info node)
 {
-    if (!self->has_pred || node_id_in_range(node->id, self->predecessor->id, self->self->id)){
+    if (!self->has_pred || node_id_in_range(node.id, self->predecessor.id, self->self.id)){
         self->predecessor = node;
         self->has_pred = 1;
     }
@@ -357,10 +367,6 @@ void node_notified(struct node_self* self, struct node_info node)
 // Fix Fingers
 //
 
-struct finger_update_arg{
-    struct node_self* self;
-    int finger_num;
-};
 
 void finger_update(struct node_info node, void *arg)
 {
@@ -372,10 +378,10 @@ void finger_update(struct node_info node, void *arg)
 
 void node_fix_a_finger(struct node_self* self, int finger_num)
 {
-    if (finger_num >= ID_BITS || finger_num < 0){
+    if (finger_num >= ID_BITS || finger_num <= 0){
         return; }// non-existent finger
 
-    hash_type finger_id = self->self->id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
+    hash_type finger_id = self->self.id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
 
     struct finger_update_arg* fua = malloc(sizeof(struct finger_update_arg));
     fua->finger_num = finger_num;
@@ -406,7 +412,7 @@ void node_check_predecessor_reply(int connection, void *arg)
     }else{
         // couldn't reach pred
         self->has_pred = 0;
-        memset(&(node->predecessor), 0, sizeof(struct node_info));
+        memset(&(self->predecessor), 0, sizeof(struct node_info));
     }
     free(token);
     net_connection_close(self->net, connection);
@@ -415,11 +421,11 @@ void node_check_predecessor_reply(int connection, void *arg)
 void node_check_predecessor_event(int connection, short type, void *arg)
 {
     struct node_self* self = (struct node_self*) arg;
-    if (events & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
-        if (events & (BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
+    if (type & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
+        if (type & (BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
             // couldn't reach pred
             self->has_pred = 0;
-            memset(&(node->predecessor), 0, sizeof(struct node_info));
+            memset(&(self->predecessor), 0, sizeof(struct node_info));
         }
         net_connection_close(self->net, connection);
     }
@@ -444,7 +450,7 @@ void node_check_predecessor(struct node_self* self)
 //
 
 char* node_msg_type_str(int msg_type){
-    switch (type){
+    switch (msg_type){
         case MSG_T_ALIVE_REQ:
             return REQ_ALIVE;
         case MSG_T_NOTIF:
@@ -476,7 +482,7 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
     }
 
     if (rc < 0){
-        return rc
+        return rc;
     }
 
     return net_connection_activate(self->net, connection);
@@ -506,10 +512,6 @@ int node_connect_and_send_message(struct node_self* self, struct node_message* m
     return node_send_message(self, msg, connection);
 }
 
-struct incoming_handler_data{
-    struct node_self* self;
-    int connection;
-};
 
 void node_successor_found_for_remote(struct node_info succ, void *data)
 {
@@ -542,11 +544,11 @@ void handle_pred_request(struct node_self* self, int connection)
 
 void handle_alive_request(struct node_self* self, int connection)
 {
-    struct evbuffer* write_buf = net_connection_get_write_buffer(elf->net, connection);
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     evbuffer_add(write_buf, "ALIVE\n", 6);
 }
 
-void handle_message(struct node_self* self, struct node_message* message, int connection)
+void handle_message(struct node_self* self, struct node_message* msg, int connection)
 {
 
     // for parsing msg body
@@ -554,7 +556,7 @@ void handle_message(struct node_self* self, struct node_message* message, int co
     char* endptr;
     char* saveptr;
     char* token;
-    int read_len
+    int read_len;
     hash_type r_id;
     struct node_info other;
 
@@ -612,19 +614,19 @@ int parse_msg_type(const char* typestr)
     if (strcmp(typestr, REQ_SUCCESSOR) == 0){
         return MSG_T_SUCC_REQ;
     }
-    if (strcmp(typestr, REP_SUCCESSOR) == 0){
+    if (strcmp(typestr, RESP_SUCCESSOR) == 0){
         return MSG_T_SUCC_REP;
     }
-    if (strcmp(typestr, REQ_PREDESSOR) == 0){
+    if (strcmp(typestr, REQ_PREDECESSOR) == 0){
         return MSG_T_PRED_REQ;
     }
-    if (strcmp(typestr, REP_PREDESSOR) == 0){
+    if (strcmp(typestr, RESP_PREDECESSOR) == 0){
         return MSG_T_PRED_REP;
     }
     if (strcmp(typestr, REQ_ALIVE) == 0){
         return MSG_T_ALIVE_REQ;
     }
-    if (strcmp(typestr, REP_ALIVE) == 0){
+    if (strcmp(typestr, RESP_ALIVE) == 0){
         return MSG_T_ALIVE_REP;
     }
     if (strcmp(typestr, REQ_NOTIFY) == 0){
@@ -644,26 +646,26 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
 
     // from id
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg.from.id = strtoull(token, &endptr, 16);
+    msg->from.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
 
     // to id
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg.to.id = strtoull(token, &endptr, 16);
+    msg->to.id = strtoull(token, &endptr, 16);
     header_len += line_len + 1;
     free(token);
 
     // type of message
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    if (msg.type = parse_msg_type(token) == MSG_T_UNKNOWN) {
+    if (msg->type = parse_msg_type(token) == MSG_T_UNKNOWN) {
             return -1; }
     header_len += line_len + 1;
     free(token);
 
     // length of content or 0 if none
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg.len = (int) strtoul(token, &endptr, 10);
+    msg->len = (int) strtoul(token, &endptr, 10);
     header_len += line_len + 1;
     free(token);
     return 0;

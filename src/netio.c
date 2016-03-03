@@ -368,7 +368,7 @@ uint32_t net_connection_get_remote_address(struct net_server* srv, const int con
 
         int fd = bufferevent_getfd(srv->connections[conn].bev);
 
-        int rc = getpeername(socketFD , &addr , &len);
+        int rc = getpeername(fd , &addr , &len);
         return ntohl(s->sin_addr.s_addr);
     }
     return 0;

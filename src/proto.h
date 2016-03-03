@@ -19,8 +19,8 @@ resp: successor [of id] is s_id
   --s_id needs actual address not just hash id
 */
 
-#define REQ_SUCCESSOR
-#define RESP_SUCCESSOR
+#define REQ_SUCCESSOR "GET_SUCC"
+#define RESP_SUCCESSOR "GOT_SUCC"
 
 /*
 stabilize:
@@ -28,8 +28,8 @@ req: who is your predecessor?
 resp: predecessor is id
 */
 
-#define REQ_PREDECESSOR
-#define RESP_PREDECESSOR
+#define REQ_PREDECESSOR "GET_PRED"
+#define RESP_PREDECESSOR "GOT_PRED"
 
 /*
 notify:
@@ -37,8 +37,8 @@ req: notify id
 resp: [ok]
 */
 
-#define REQ_NOTIFY
-#define RESP_NOTIFY // is this necessary ?
+#define REQ_NOTIFY "NOTIF"
+#define RESP_NOTIFY "NOTIFD" // is this necessary ?
 
 /*
 check_predecessor:
@@ -46,8 +46,8 @@ req: are you there
 resp: yes i am here
 */
 
-#define REQ_ALIVE
-#define RESP_ALIVE
+#define REQ_ALIVE "ALIVE?"
+#define RESP_ALIVE "ALIVE"
 
 #define MES_END ("\n\n")
 

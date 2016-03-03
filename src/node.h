@@ -2,8 +2,11 @@
 #define DHT_H
 
 #include <stdint.h>
+#include <event2/buffer.h>
 
-#define hash_type uint32_t
+#include "libdht.h"
+#include "netio.h"
+
 #define ID_BITS 32
 #define ID_HEX_CHARS (ID_BITS/4)
 #define FINGER_SIZE_INIT 6
@@ -12,11 +15,10 @@
 
 struct node_self;
 
-struct node_info{
-    hash_type id;
-    uint32_t IP;
-    uint16_t port;
-};
+struct node_found_cb_data;
+struct node_join_cb_data;
+struct node_found_cb_data;
+struct finger_update_arg;
 
 struct node_message{
     struct node_info to;
@@ -26,9 +28,11 @@ struct node_message{
     char* content;
 };
 
+typedef void (*on_join_cb_t)(void* arg);
 typedef void (*node_found_cb_t)(struct node_info, void *);
+typedef void (*on_join_cb_t)(void* arg);
 
-struct node_self* node_create();
+struct node_self* node_create(uint16_t listen_port, char* name);
 
 void node_destroy(struct node_self* n);
 
@@ -63,7 +67,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 /**
  * ask node n for its predecessor
  */
-void node_get_predecessor_remote(struct node_self* self, struct node_info* n, node_found_cb_t cb, void* found_cb_arg);
+void node_get_predecessor_remote(struct node_self* self, struct node_info n, node_found_cb_t cb, void* found_cb_arg);
 
 /**
  *
@@ -75,7 +79,7 @@ void node_network_stabalize(struct node_self* self);
  * notify node_id of self's existence
  * self believes node_id is it's successor
  */
-void node_notify_node(struct node_self* self, hash_type node_id);
+void node_notify_node(struct node_self* self, struct node_info node);
 
 /**
  *
@@ -94,10 +98,11 @@ void node_alive_timeout(struct node_self* self, struct node_info* node);
 /**
  * called when a message from another node is received
  */
-void handle_message(struct node_self* self, struct node_message* message, struct evbuffer *replyto);
+void handle_message(struct node_self* self, struct node_message* message, int connection);
 
 
 int node_send_message(struct node_self* self, struct node_message* message, const int connection);
-int node_connect_and_send_message(struct node_self* self, struct node_message* message, );
+
+int node_connect_and_send_message(struct node_self* self, struct node_message* msg, net_connection_data_cb_t read_cb, net_connection_event_cb_t event_cb, void *cb_arg, time_t timeout_secs);
 
 #endif // DHT_H
