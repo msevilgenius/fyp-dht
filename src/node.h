@@ -12,6 +12,7 @@
 #define FINGER_SIZE_INIT 6
 // wait 20 secs before timout node
 #define NODE_TIMEOUT 20
+#define STABILIZE_PERIOD 90
 
 struct node_self;
 

@@ -122,6 +122,22 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
     //TODO setup stabilisation timeout cbs
     struct node_self* self = cb_data->self;
+    struct event_base base = net_get_base(self->net);
+
+    struct event* stabilise_tm_ev;
+    struct event* fix_finger_tm_ev;
+    struct event* check_pred_tm_ev;
+
+    struct timeval stab_tm = {STABILIZE_PERIOD, 0};
+    struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
+
+    stabilise_tm_ev  = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_stabilise,   (void*) self);
+    fix_finger_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_fix_fingers, (void*) self);
+    check_pred_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_check_pred,  (void*) self);
+
+    event_add(stabilise_tm_ev, stab_tm_comm);
+    event_add(fix_finger_tm_ev, stab_tm_comm);
+    event_add(check_pred_tm_ev, stab_tm_comm);
 
 
     free(cb_data);
@@ -165,6 +181,28 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
     self->has_pred = 0; // nil
     node_find_successor_remote(self, node, self->self.id, cb_data);
     return net_server_run(self->net);
+}
+
+//
+// Timeout callbacks for stabilization
+//
+
+void node_tm_stabilise(evutil_socket_t fd, short what, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    node_network_stabalize(self);
+}
+
+void node_tm_fix_fingers(evutil_socket_t fd, short what, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    node_fix_fingers(self);
+}
+
+void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    node_check_predecessor(self);
 }
 
 //
