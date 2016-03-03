@@ -313,7 +313,7 @@ void* net_connection_get_cb_arg(struct net_server* srv, const int conn)
     return NULL;
 }
 
-void net_connection_set_timeouts(struct net_server* srv, const int conn, const struct timeval* read_tm, const timeval* write_tm)
+void net_connection_set_timeouts(struct net_server* srv, const int conn, const struct timeval* read_tm, const struct timeval* write_tm)
 {
     if (!net_valid_connection_num(conn)){
         return; }
