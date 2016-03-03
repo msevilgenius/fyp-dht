@@ -112,7 +112,7 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 
     #ifdef USE_NETW
     netw_init();
-    node->net = netw_net_server_create(listen_port, incoming_connection, (void*) node);
+    node->net = netw_net_server_create(listen_port);
     netw_register_handler(incoming_connection, (void*) node);
     #else
     node->net = net_server_create(listen_port, incoming_connection, (void*) node);

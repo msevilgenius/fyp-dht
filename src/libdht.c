@@ -11,7 +11,7 @@ hash_type get_id(const char* name)
 
     SHA1((unsigned char *)name, strlen(name), sha_1);
     char sha_1_4[sizeof(hash_type)+1];
-    strncpy(sha_1_4, sha_1, sizeof(hash_type))
+    strncpy(sha_1_4, sha_1, sizeof(hash_type));
     sha_1_4[sizeof(hash_type)] = '\0';
 
     hash_id = strtol(sha_1_4, NULL, 16);
