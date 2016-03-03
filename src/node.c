@@ -141,7 +141,6 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
     cb_data->joined_cb(cb_data->joined_cb_arg);
 
-    //TODO setup stabilisation timeout cbs
     struct node_self* self = cb_data->self;
     struct event_base *base = net_get_base(self->net);
 
@@ -159,6 +158,7 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
     event_add(stabilise_tm_ev, stab_tm_comm);
     event_add(fix_finger_tm_ev, stab_tm_comm);
     event_add(check_pred_tm_ev, stab_tm_comm);
+    //TODO call all stabs now?
 
 
     free(cb_data);
@@ -182,8 +182,10 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 // TODO
 void node_network_join_succ_found(struct node_info succ, void *arg)
 {
-    self->successor = succ;
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
+
+    struct node_self* self = cb_data->self;
+    self->successor = succ;
 
     event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
 }
@@ -248,7 +250,7 @@ void node_found_remote_cb(int connection, void *arg)
     char* token;
 
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    // TODO this may be "NONE" in the case of  get predecessor
+
     if (strncmp(token, "NONE", 4)){
         cb_data->node.id = 0;
         cb_data->node.IP = 0;
@@ -360,7 +362,6 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     cb_data->cb           = cb;
     cb_data->found_cb_arg = found_cb_arg;
 
-    // TODO
     node_connect_and_send_message(self, &msg, node_found_remote_cb,
                                   node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
