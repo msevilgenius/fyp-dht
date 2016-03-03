@@ -179,7 +179,6 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     return net_server_run(self->net);
 }
 
-// TODO
 void node_network_join_succ_found(struct node_info succ, void *arg)
 {
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
@@ -793,20 +792,3 @@ void incoming_connection(int connection, short type, void *arg)
     net_connection_set_cb_arg(self->net, connection, (void*)self);
     net_connection_set_timeouts(self->net, connection, NODE_WAIT_TM_DEFAULT, NODE_WAIT_TM_DEFAULT);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

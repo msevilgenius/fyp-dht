@@ -80,6 +80,4 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg);
 
 
-
-
 #endif // NETIO_H
