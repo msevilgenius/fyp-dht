@@ -115,8 +115,6 @@ void node_destroy(struct node_self* n)
 // node network join/create
 //
 
-
-
 void node_network_joined(evutil_socket_t fd, short what, void *arg)
 {
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
@@ -144,6 +142,7 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     return net_server_run(self->net);
 }
 
+// TODO
 void node_network_join_succ_found(struct node_info succ, void *arg)
 {
     self->successor = succ;
@@ -172,7 +171,6 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
 // callbacks for when node is found
 //
 
-
 void node_found(evutil_socket_t fd, short what, void *arg)
 {
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
@@ -194,20 +192,28 @@ void node_found_remote_cb(int connection, void *arg)
 
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     // TODO this may be "NONE" in the case of  get predecessor
-    endptr = NULL;
-    cb_data->node.id = strtoull(token, &endptr, 16);
-    free(token);
+    if (strncmp(token, "NONE", 4)){
+        cb_data->node.id = 0;
+        cb_data->node.IP = 0;
+        cb_data->node.port = 0;
+        free(token);
+    }else{
+        free(token);
+        token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+        endptr = NULL;
+        cb_data->node.id = strtoull(token, &endptr, 16);
+        free(token);
 
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    endptr = NULL;
-    cb_data->node.IP = strtoull(token, &endptr, 16);
-    free(token);
-    //cb_data->node.IP = net_connection_get_remote_address(self->net, connection);
+        token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+        endptr = NULL;
+        cb_data->node.IP = strtoull(token, &endptr, 16);
+        free(token);
 
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    endptr = NULL;
-    cb_data->node.port = strtoull(token, &endptr, 16);
-    free(token);
+        token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+        endptr = NULL;
+        cb_data->node.port = strtoull(token, &endptr, 16);
+        free(token);
+    }
 
     net_connection_close(self->net, connection);
 
@@ -224,7 +230,8 @@ node_remote_find_event(int connection, short type, void *arg)
 //
 
 //ask node n for successor of id
-int node_find_successor_remote(struct node_self* self, struct node_info n, hash_type id, struct node_found_cb_data* cb_data)
+int node_find_successor_remote(struct node_self* self, struct node_info n,
+                               hash_type id, struct node_found_cb_data* cb_data)
 {
     struct node_message msg;
     msg.from = self->self;
@@ -236,7 +243,8 @@ int node_find_successor_remote(struct node_self* self, struct node_info n, hash_
     msg.len  = ID_BITS/4;
     msg.content = content;
 
-    return node_connect_and_send_message(self, &msg, node_found_remote_cb, node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
+    return node_connect_and_send_message(self, &msg, node_found_remote_cb,
+                                         node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
 }
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
@@ -245,28 +253,28 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
     int rv = -1;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
 
-            cb_data = malloc(sizeof(struct node_found_cb_data));
-            cb_data->cb           = cb;
-            cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->self;
+        cb_data = malloc(sizeof(struct node_found_cb_data));
+        cb_data->cb           = cb;
+        cb_data->found_cb_arg = found_cb_arg;
+        cb_data->node         = self->self;
 
-            if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
-                free(cb_data);
-                return -1;
-            };
+        if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+            free(cb_data);
+            return -1;
+        };
     }
     else
     if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
 
-            cb_data = malloc(sizeof(struct node_found_cb_data));
-            cb_data->cb           = cb;
-            cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->successor;
+        cb_data = malloc(sizeof(struct node_found_cb_data));
+        cb_data->cb           = cb;
+        cb_data->found_cb_arg = found_cb_arg;
+        cb_data->node         = self->successor;
 
-            if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
-                free(cb_data);
-                return -1;
-            };
+        if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+            free(cb_data);
+            return -1;
+        };
 
     }else{ // need to ask another node to find it
         struct node_info n = node_closest_preceding_node(self, id); // node to ask
@@ -280,7 +288,8 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
     return 0;
 }
 
-void node_get_predecessor_remote(struct node_self* self, struct node_info n, node_found_cb_t cb, void* found_cb_arg)
+void node_get_predecessor_remote(struct node_self* self, struct node_info n,
+                                 node_found_cb_t cb, void* found_cb_arg)
 {
     struct node_found_cb_data* cb_data;
     struct node_message msg;
@@ -297,6 +306,8 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n, nod
 
     // TODO
     node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
+    node_connect_and_send_message(self, &msg, node_found_remote_cb,
+                                  node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
@@ -367,7 +378,6 @@ void node_notified(struct node_self* self, struct node_info node)
 // Fix Fingers
 //
 
-
 void finger_update(struct node_info node, void *arg)
 {
     struct finger_update_arg* fua = (struct finger_update_arg*) arg;
@@ -380,8 +390,8 @@ void node_fix_a_finger(struct node_self* self, int finger_num)
 {
     if (finger_num >= ID_BITS || finger_num <= 0){
         return; }// non-existent finger
-
-    hash_type finger_id = self->self.id + (hash_type) two_to_the_n(finger_num - 1); // this might need redoing if hash_type changes
+    // this might need redoing if hash_type changes
+    hash_type finger_id = self->self.id + (hash_type) two_to_the_n(finger_num - 1);
 
     struct finger_update_arg* fua = malloc(sizeof(struct finger_update_arg));
     fua->finger_num = finger_num;
@@ -442,7 +452,8 @@ void node_check_predecessor(struct node_self* self)
     msg.len  = 0;
     msg.content = NULL;
 
-    node_connect_and_send_message(self, &msg, node_check_predecessor_reply, node_check_predecessor_event, (void*) self, NODE_TIMEOUT);
+    node_connect_and_send_message(self, &msg, node_check_predecessor_reply,
+                                  node_check_predecessor_event, (void*) self, NODE_TIMEOUT);
 }
 
 //
@@ -476,9 +487,11 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
     int rc = 0;
 
     if (msg->content != NULL){
-        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from, msg->to, node_msg_type_str(msg->type), msg->len, msg->content);
+        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from, msg->to,
+                                 node_msg_type_str(msg->type), msg->len, msg->content);
     }else{
-        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from, msg->to, node_msg_type_str(msg->type), 0);
+        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from, msg->to,
+                                 node_msg_type_str(msg->type), 0);
     }
 
     if (rc < 0){
@@ -489,7 +502,12 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
 }
 
 
-int node_connect_and_send_message(struct node_self* self, struct node_message* msg, net_connection_data_cb_t read_cb, net_connection_event_cb_t event_cb, void *cb_arg, time_t timeout_secs)
+int node_connect_and_send_message(struct node_self* self,
+                                  struct node_message* msg,
+                                  net_connection_data_cb_t read_cb,
+                                  net_connection_event_cb_t event_cb,
+                                  void *cb_arg,
+                                  time_t timeout_secs)
 {
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
     if(connection < 0){
@@ -516,7 +534,8 @@ int node_connect_and_send_message(struct node_self* self, struct node_message* m
 void node_successor_found_for_remote(struct node_info succ, void *data)
 {
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
-    struct evbuffer* write_buf = net_connection_get_write_buffer(handler_data->self->net, handler_data->connection);
+    struct evbuffer* write_buf = net_connection_get_write_buffer(
+                                 handler_data->self->net, handler_data->connection);
 
     evbuffer_add_printf(write_buf, "%X\n%X\n%X\n", succ.id, succ.IP, succ.port);
 
@@ -536,7 +555,8 @@ void handle_pred_request(struct node_self* self, int connection)
 {
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (self->has_pred){
-        evbuffer_add_printf(write_buf, "OK\n%X\n%X\n%X\n", self->predecessor.id, self->predecessor.IP, self->predecessor.port);
+        evbuffer_add_printf(write_buf, "OKAY\n%X\n%X\n%X\n",
+                            self->predecessor.id, self->predecessor.IP, self->predecessor.port);
     }else{
         evbuffer_add(write_buf, "NONE\n", 5);
     }
