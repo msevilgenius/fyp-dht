@@ -313,16 +313,11 @@ void* net_connection_get_cb_arg(struct net_server* srv, const int conn)
     return NULL;
 }
 
-void net_connection_set_timeouts(struct net_server* srv, const int conn, const time_t read_t_secs, const time_t write_t_secs)
+void net_connection_set_timeouts(struct net_server* srv, const int conn, const struct timeval* read_tm, const timeval* write_tm)
 {
     if (!net_valid_connection_num(conn)){
         return; }
-
-    struct timeval read_to;
-    struct timeval write_to;
-    read_to.tv_sec = read_t_secs;
-    write_to.tv_sec = write_t_secs;
-    bufferevent_set_timeouts(srv->connections[conn].bev, &read_to, &write_to);
+    bufferevent_set_timeouts(srv->connections[conn].bev, read_tm, write_tm);
 }
 
 int net_connection_activate(struct net_server* srv, const int conn)

@@ -15,6 +15,8 @@
 #define MSG_T_ALIVE_REQ 7
 #define MSG_T_UNKNOWN (-1)
 
+struct timeval *NODE_WAIT_TM_DEFAULT = NULL;
+struct timeval *NODE_WAIT_TM_LONG = NULL;
 
 struct node_found_cb_data;
 
@@ -80,6 +82,15 @@ void incoming_connection(int connection, short type, void *arg);
 
 struct node_self* node_create(uint16_t listen_port, char* name)
 {
+    if (!NODE_WAIT_TM_DEFAULT){
+        struct timeval default_tm = {NODE_TIMEOUT, 0};
+        NODE_WAIT_TM_DEFAULT = event_base_init_common_timeout(base, &default_tm);
+    }
+    if (!NODE_WAIT_TM_LONG){
+        struct timeval long_tm = {(NODE_TIMEOUT * 3), 0};
+        NODE_WAIT_TM_LONG = event_base_init_common_timeout(base, &long_tm);
+    }
+
     struct node_self* node = malloc(sizeof(struct node_self));
     if(!node) { return NULL; }
 
@@ -282,7 +293,7 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
     msg.content = content;
 
     return node_connect_and_send_message(self, &msg, node_found_remote_cb,
-                                         node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
+                                         node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
@@ -345,7 +356,7 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     // TODO
     node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
     node_connect_and_send_message(self, &msg, node_found_remote_cb,
-                                  node_remote_find_event, (void*) cb_data, NODE_TIMEOUT * 3);
+                                  node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
@@ -401,7 +412,7 @@ void node_notify_node(struct node_self* self, struct node_info node)
     msg.len = ID_HEX_CHARS + 1 + (16/4) + 1;
     msg.content = content;
 
-    node_connect_and_send_message(self, &msg, NULL, node_notify_rep_event, (void*)self, NODE_TIMEOUT);
+    node_connect_and_send_message(self, &msg, NULL, node_notify_rep_event, (void*)self, NODE_WAIT_TM_DEFAULT);
 }
 
 void node_notified(struct node_self* self, struct node_info node)
@@ -491,7 +502,7 @@ void node_check_predecessor(struct node_self* self)
     msg.content = NULL;
 
     node_connect_and_send_message(self, &msg, node_check_predecessor_reply,
-                                  node_check_predecessor_event, (void*) self, NODE_TIMEOUT);
+                                  node_check_predecessor_event, (void*) self, NODE_WAIT_TM_DEFAULT);
 }
 
 //
@@ -545,7 +556,7 @@ int node_connect_and_send_message(struct node_self* self,
                                   net_connection_data_cb_t read_cb,
                                   net_connection_event_cb_t event_cb,
                                   void *cb_arg,
-                                  time_t timeout_secs)
+                                  struct timeval *timeout)
 {
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
     if(connection < 0){
@@ -553,7 +564,7 @@ int node_connect_and_send_message(struct node_self* self,
         return connection;
     }
     if (timeout_secs >= 0){
-        net_connection_set_timeouts(self->net, connection, timeout_secs, timeout_secs);
+        net_connection_set_timeouts(self->net, connection, timeout, timeout);
     }
     if (read_cb){
         net_connection_set_read_cb(self->net, connection, read_cb);
@@ -773,7 +784,7 @@ void incoming_connection(int connection, short type, void *arg)
     net_connection_set_read_cb(self->net, connection, incoming_read_cb);
     net_connection_set_event_cb(self->net, connection, incoming_event_cb);
     net_connection_set_cb_arg(self->net, connection, (void*)self);
-    net_connection_set_timeouts(self->net, connection, NODE_TIMEOUT, NODE_TIMEOUT);
+    net_connection_set_timeouts(self->net, connection, NODE_WAIT_TM_DEFAULT, NODE_WAIT_TM_DEFAULT);
 }
 
 

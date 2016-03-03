@@ -55,7 +55,7 @@ int net_connection_set_cb_arg(struct net_server* srv, const int conn, void *cb_a
 
 void* net_connection_get_cb_arg(struct net_server* srv, const int conn);
 
-void net_connection_set_timeouts(struct net_server* srv, const int conn, const time_t read_t_secs, const time_t write_t_secs);
+void net_connection_set_timeouts(struct net_server* srv, const int conn, const struct timeval* read_tm, const timeval* write_tm);
 
 /*
  * actually open connection and begin I/O
