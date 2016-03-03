@@ -1,6 +1,8 @@
 #ifndef DHT_H
 #define DHT_H
 
+#define USE_NETW
+
 #include <stdint.h>
 #include <event2/buffer.h>
 
@@ -36,6 +38,8 @@ typedef void (*on_join_cb_t)(void* arg);
 struct node_self* node_create(uint16_t listen_port, char* name);
 
 void node_destroy(struct node_self* n);
+
+struct net_server* node_get_net(struct node_self* self);
 
 /**
  * creates a new overlay network

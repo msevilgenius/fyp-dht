@@ -6,6 +6,10 @@
 #include "netio.h"
 #include "proto.h"
 
+#ifdef USE_NETW
+#include "net_wrapper.h"
+#endif // USE_NETW
+
 #define MSG_T_NOTIF     1
 #define MSG_T_SUCC_REP  2
 #define MSG_T_SUCC_REQ  3
@@ -27,6 +31,9 @@ struct node_self{
     short has_pred;
     struct node_info* finger_table;
     struct net_server* net;
+#ifdef USE_NETW
+    int netw_handle;
+#endif // USE_NETW
 };
 
 struct node_join_cb_data{
@@ -103,7 +110,14 @@ struct node_self* node_create(uint16_t listen_port, char* name)
             free(node);
             return NULL; }
 
+    #ifdef USE_NETW
+    netw_init();
+    node->net = netw_net_server_create(listen_port, incoming_connection, (void*) node);
+    netw_register_handler(incoming_connection, (void*) node);
+    #else
     node->net = net_server_create(listen_port, incoming_connection, (void*) node);
+    #endif // USE_NETW
+
     if (!node->net){
             free(node->finger_table);
             free(node);
@@ -126,10 +140,19 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 
 void node_destroy(struct node_self* n)
 {
+    #ifdef USE_NETW
+    netw_destroy();
+    #endif // USE_NETW
+
     if (!n) { return; }
     if (n->net){ net_server_destroy(n->net); }
     if (n->finger_table){ free(n->finger_table); }
     free(n);
+}
+
+struct net_server* node_get_net(struct node_self* self)
+{
+    return self->net;
 }
 
 //
@@ -565,7 +588,11 @@ int node_connect_and_send_message(struct node_self* self,
                                   void *cb_arg,
                                   const struct timeval *timeout)
 {
+    #ifdef USE_NETW
+    int connection = netw_net_connection_create(self->net, msg->to.IP, msg->to.port, self->netw_handle);
+    #else
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
+    #endif // USE_NETW
     if(connection < 0){
         // error creating connection
         return connection;
@@ -579,7 +606,7 @@ int node_connect_and_send_message(struct node_self* self,
     if (event_cb){
         net_connection_set_event_cb(self->net, connection, event_cb);
     }
-    if (read_cb){
+    if (cb_arg){
         net_connection_set_cb_arg(self->net, connection, cb_arg);
     }
 
