@@ -104,6 +104,8 @@ void handle_message(struct node_self* self, struct node_message* message, int co
 
 int node_send_message(struct node_self* self, struct node_message* message, const int connection);
 
-int node_connect_and_send_message(struct node_self* self, struct node_message* msg, net_connection_data_cb_t read_cb, net_connection_event_cb_t event_cb, void *cb_arg, struct timeval *timeout);
+int node_connect_and_send_message(struct node_self* self, struct node_message* msg,
+                                  net_connection_data_cb_t read_cb, net_connection_event_cb_t event_cb,
+                                  void *cb_arg, const struct timeval *timeout);
 
 #endif // DHT_H

@@ -15,8 +15,8 @@
 #define MSG_T_ALIVE_REQ 7
 #define MSG_T_UNKNOWN (-1)
 
-struct timeval *NODE_WAIT_TM_DEFAULT = NULL;
-struct timeval *NODE_WAIT_TM_LONG = NULL;
+const struct timeval *NODE_WAIT_TM_DEFAULT = NULL;
+const struct timeval *NODE_WAIT_TM_LONG = NULL;
 
 struct node_found_cb_data;
 
@@ -52,6 +52,13 @@ struct incoming_handler_data{
     int connection;
 };
 
+void node_tm_stabilise(evutil_socket_t fd, short what, void *arg);
+
+void node_tm_fix_fingers(evutil_socket_t fd, short what, void *arg);
+
+void node_tm_check_pred(evutil_socket_t fd, short what, void *arg);
+
+
 //
 // ID helpers
 //
@@ -68,7 +75,7 @@ int node_id_in_range(hash_type id, hash_type min, hash_type max)
     if (max > min){ //easy
         return  ((id >= min) && (id <= max));
     }else if (max < min){ // min -> 0 -> max
-        return  ((id >= min) || ((id >= 0) && (id <= max)));
+        return  ((id >= min) || (id <= max));
     }else{ //max == min
         return (id == max);
     }
@@ -82,15 +89,6 @@ void incoming_connection(int connection, short type, void *arg);
 
 struct node_self* node_create(uint16_t listen_port, char* name)
 {
-    if (!NODE_WAIT_TM_DEFAULT){
-        struct timeval default_tm = {NODE_TIMEOUT, 0};
-        NODE_WAIT_TM_DEFAULT = event_base_init_common_timeout(base, &default_tm);
-    }
-    if (!NODE_WAIT_TM_LONG){
-        struct timeval long_tm = {(NODE_TIMEOUT * 3), 0};
-        NODE_WAIT_TM_LONG = event_base_init_common_timeout(base, &long_tm);
-    }
-
     struct node_self* node = malloc(sizeof(struct node_self));
     if(!node) { return NULL; }
 
@@ -110,6 +108,18 @@ struct node_self* node_create(uint16_t listen_port, char* name)
             free(node->finger_table);
             free(node);
             return NULL; }
+
+    struct event_base* base = net_get_base(node->net);
+
+    if (!NODE_WAIT_TM_DEFAULT){
+        struct timeval default_tm = {NODE_TIMEOUT, 0};
+        NODE_WAIT_TM_DEFAULT = event_base_init_common_timeout(base, &default_tm);
+    }
+    if (!NODE_WAIT_TM_LONG){
+        struct timeval long_tm = {(NODE_TIMEOUT * 3), 0};
+        NODE_WAIT_TM_LONG = event_base_init_common_timeout(base, &long_tm);
+    }
+
 
     return node;
 }
@@ -133,14 +143,14 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
     //TODO setup stabilisation timeout cbs
     struct node_self* self = cb_data->self;
-    struct event_base base = net_get_base(self->net);
+    struct event_base *base = net_get_base(self->net);
 
     struct event* stabilise_tm_ev;
     struct event* fix_finger_tm_ev;
     struct event* check_pred_tm_ev;
 
     struct timeval stab_tm = {STABILIZE_PERIOD, 0};
-    struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
+    const struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
 
     stabilise_tm_ev  = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_stabilise,   (void*) self);
     fix_finger_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_fix_fingers, (void*) self);
@@ -232,10 +242,8 @@ void node_found_remote_cb(int connection, void *arg)
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     struct node_self* self = cb_data->self;
 
-    struct node_message msg;
     struct evbuffer *read_buf = net_connection_get_read_buffer(self->net, connection);
-    int header_len = 0;
-    int line_len;
+    size_t line_len;
     char* endptr;
     char* token;
 
@@ -269,7 +277,7 @@ void node_found_remote_cb(int connection, void *arg)
     node_found(-1, 0, cb_data);
 }
 
-node_remote_find_event(int connection, short type, void *arg)
+void node_remote_find_event(int connection, short type, void *arg)
 {
 
 }
@@ -299,7 +307,6 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
     struct node_found_cb_data *cb_data;
-    int rv = -1;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -354,7 +361,6 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     cb_data->found_cb_arg = found_cb_arg;
 
     // TODO
-    node_send_message(self, &msg, node_found_remote_cb, (void*) cb_data);
     node_connect_and_send_message(self, &msg, node_found_remote_cb,
                                   node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
@@ -408,7 +414,7 @@ void node_notify_node(struct node_self* self, struct node_info node)
     msg.type = MSG_T_NOTIF;
 
     char content[ID_HEX_CHARS + 1 + (16/4) + 1 + 1];
-    snprintf(content, "%08X\n%04X\n", self->self.id, self->self.port);
+    snprintf(content, sizeof(content)-1, "%08X\n%04X\n", self->self.id, self->self.port);
     msg.len = ID_HEX_CHARS + 1 + (16/4) + 1;
     msg.content = content;
 
@@ -461,8 +467,7 @@ void node_check_predecessor_reply(int connection, void *arg)
     struct node_self* self = (struct node_self*) arg;
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 
-    int line_len;
-    char* endptr;
+    size_t line_len;
     char* token;
 
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
@@ -525,6 +530,8 @@ char* node_msg_type_str(int msg_type){
             return RESP_PREDECESSOR;
         case MSG_T_SUCC_REP:
             return RESP_SUCCESSOR;
+        default:
+            return "NONE";
     }
 }
 
@@ -536,10 +543,10 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
     int rc = 0;
 
     if (msg->content != NULL){
-        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from, msg->to,
+        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from.id, msg->to.id,
                                  node_msg_type_str(msg->type), msg->len, msg->content);
     }else{
-        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from, msg->to,
+        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from.id, msg->to.id,
                                  node_msg_type_str(msg->type), 0);
     }
 
@@ -556,14 +563,14 @@ int node_connect_and_send_message(struct node_self* self,
                                   net_connection_data_cb_t read_cb,
                                   net_connection_event_cb_t event_cb,
                                   void *cb_arg,
-                                  struct timeval *timeout)
+                                  const struct timeval *timeout)
 {
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
     if(connection < 0){
         // error creating connection
         return connection;
     }
-    if (timeout_secs >= 0){
+    if (timeout){
         net_connection_set_timeouts(self->net, connection, timeout, timeout);
     }
     if (read_cb){
@@ -625,7 +632,7 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
     char* endptr;
     char* saveptr;
     char* token;
-    int read_len;
+    size_t read_len;
     hash_type r_id;
     struct node_info other;
 
@@ -707,10 +714,9 @@ int parse_msg_type(const char* typestr)
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
 {
     int header_len = 0;
-    int line_len;
+    size_t line_len;
 
     char* endptr;
-    char* saveptr;
     char* token;
 
     // from id
@@ -727,7 +733,7 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
 
     // type of message
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    if (msg->type = parse_msg_type(token) == MSG_T_UNKNOWN) {
+    if ((msg->type = parse_msg_type(token) == MSG_T_UNKNOWN)) {
             return -1; }
     header_len += line_len + 1;
     free(token);

@@ -158,7 +158,7 @@ struct event_base* net_get_base(struct net_server* srv)
     return srv->base;
 }
 
-static void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
+void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg)
 {
     struct net_server *srv = (struct net_server *) arg;
