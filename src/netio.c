@@ -57,9 +57,9 @@ int net_empty_connection_slot(struct net_server* srv)
 
 void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 {
-    log_info("connection read ready");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
+    log_info("connection read ready %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->read_cb)
@@ -69,9 +69,9 @@ void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 
 void net_connection_write_cb(struct bufferevent *bev, void *ctx)
 {
-    log_info("connection write ready");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
+    log_info("connection write ready %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->write_cb)
@@ -82,9 +82,9 @@ void net_connection_write_cb(struct bufferevent *bev, void *ctx)
 void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
 {
 
-    log_info("event occurred on connection");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
+    log_info("event occurred on connection %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->evt_cb)
@@ -186,6 +186,7 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         return;
     }
 
+    log_info("creating connection %d", conn);
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     srv->connections[conn].bev = bev;
 
@@ -205,12 +206,12 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
-    log_info("calling handler");
+    log_info("calling handler %d", conn);
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 
-    log_info("incoming enabled");
+    log_info("incoming enabled %d", conn);
 }
 
 int net_server_run(struct net_server* srv)
@@ -265,7 +266,7 @@ int net_connection_create(struct net_server* srv, const uint32_t IP, const uint1
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
-    log_info("created connection");
+    log_info("created connection %d", conn);
 
     return conn;
 }
