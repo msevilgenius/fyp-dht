@@ -1,8 +1,8 @@
-#include "netio.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 
+#include "netio.h"#include "logging.h"
 
 struct net_connection{
     struct bufferevent* bev;
@@ -57,6 +57,7 @@ int net_empty_connection_slot(struct net_server* srv)
 
 void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 {
+    log_info("connection read ready");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
@@ -68,6 +69,7 @@ void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 
 void net_connection_write_cb(struct bufferevent *bev, void *ctx)
 {
+    log_info("connection write ready");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
@@ -79,6 +81,8 @@ void net_connection_write_cb(struct bufferevent *bev, void *ctx)
 
 void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
 {
+
+    log_info("event occurred on connection");
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
     if(net_valid_connection_num(conn)){
@@ -160,13 +164,15 @@ void net_server_destroy(struct net_server* srv)
 
 struct event_base* net_get_base(struct net_server* srv)
 {
-    if (!srv) printf("uhoh\n");
+    if (!srv) return NULL;
     return srv->base;
 }
 
 void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg)
 {
+
+    log_info("listen event");
     struct net_server *srv = (struct net_server *) arg;
 
     struct event_base* base = evconnlistener_get_base(listener);
@@ -198,10 +204,13 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
     srv->connections[conn].net_cb_arg->srv = srv;
 
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
+
+    log_info("calling handler");
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 
+    log_info("incoming enabled");
 }
 
 int net_server_run(struct net_server* srv)
@@ -218,7 +227,7 @@ int net_server_run(struct net_server* srv)
 
 int net_connection_create(struct net_server* srv, const uint32_t IP, const uint16_t port)
 {
-    if(!srv) printf("uhoh!!!11!!\n");
+    if(!srv) return -1;
     struct event_base *base = srv->base;
 
     pthread_mutex_lock(&(srv->connections_lock));
@@ -256,6 +265,8 @@ int net_connection_create(struct net_server* srv, const uint32_t IP, const uint1
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
+    log_info("created connection");
+
     return conn;
 }
 
@@ -330,6 +341,8 @@ void net_connection_set_timeouts(struct net_server* srv, const int conn, const s
 int net_connection_activate(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
+
+        log_info("activating connection %d", conn);
 
         struct sockaddr_in *sin = &(srv->connections[conn].sin);
         struct bufferevent *bev = srv->connections[conn].bev;

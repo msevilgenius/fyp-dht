@@ -5,6 +5,7 @@
 #include "node.h"
 #include "netio.h"
 #include "proto.h"
+#include "logging.h"
 
 #ifdef USE_NETW
 #include "net_wrapper.h"
@@ -172,16 +173,15 @@ void node_set_node_msg_handler(struct node_self* self, node_msg_cb_t node_msg_cb
 
 void node_network_joined(evutil_socket_t fd, short what, void *arg)
 {
-    printf("network joined\n");
+    log_info("network joined\n");
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
     cb_data->joined_cb(cb_data->joined_cb_arg);
-    printf("got cb data\n");
+    log_info("got cb data\n");
 
     struct node_self* self = cb_data->self;
-    printf("got self\n%X\n", self);
-    if (!self) printf("uhoh2!\n");
+    log_info("got self\n%X\n", self);
     struct event_base *base = net_get_base(self->net);
-    printf("got base\n");
+    log_info("got base\n");
 
     struct event* stabilise_tm_ev;
     struct event* fix_finger_tm_ev;
@@ -189,23 +189,23 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
     struct timeval stab_tm = {STABILIZE_PERIOD, 0};
     const struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
-    printf("got common timeval\n");
+    log_info("got common timeval\n");
 
     stabilise_tm_ev  = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_stabilise,   (void*) self);
     fix_finger_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_fix_fingers, (void*) self);
     check_pred_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_check_pred,  (void*) self);
 
-    printf("created stab evs\n");
+    log_info("created stab evs\n");
 
     event_add(stabilise_tm_ev, stab_tm_comm);
     event_add(fix_finger_tm_ev, stab_tm_comm);
     event_add(check_pred_tm_ev, stab_tm_comm);
     //TODO call all stabs now?
-    printf("added stab evs\n");
+    log_info("added stab evs\n");
 
 
     free(cb_data);
-    printf("freed cb data\n");
+    log_info("freed cb data\n");
 }
 
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
@@ -222,7 +222,7 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     struct timeval tmo = {0,1};
     event_base_once(net_get_base(self->net), -1, EV_TIMEOUT, node_network_joined, cb_data, &tmo);
 
-    printf("running server...\n");
+    log_info("running server...\n");
     return net_server_run(self->net);
 }
 
@@ -230,7 +230,7 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
 {
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
 
-    printf("succ found for join\n");
+    log_info("succ found for join\n");
 
     struct node_self* self = cb_data->self;
     self->successor = succ;
@@ -252,7 +252,7 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
     cb_data->cb = node_network_join_succ_found;
     self->has_pred = 0; // nil
     node_find_successor_remote(self, node, self->self.id, cb_data);
-    printf("running server...\n");
+    log_info("running server...\n");
     return net_server_run(self->net);
 }
 
@@ -284,6 +284,7 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 
 void node_found(evutil_socket_t fd, short what, void *arg)
 {
+    log_info("found node");
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
     free(cb_data);
@@ -291,6 +292,7 @@ void node_found(evutil_socket_t fd, short what, void *arg)
 
 void node_found_remote_cb(int connection, void *arg)
 {
+    log_info("reply from get succ remote");
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     struct node_self* self = cb_data->self;
 
@@ -302,6 +304,7 @@ void node_found_remote_cb(int connection, void *arg)
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
 
     if (strncmp(token, "NONE", 4)){
+        log_info("couldn't find it");
         cb_data->node.id = 0;
         cb_data->node.IP = 0;
         cb_data->node.port = 0;
@@ -342,6 +345,7 @@ void node_remote_find_event(int connection, short type, void *arg)
 int node_find_successor_remote(struct node_self* self, struct node_info n,
                                hash_type id, struct node_found_cb_data* cb_data)
 {
+    log_info("find_succ_remote");
     struct node_message msg;
     msg.from = self->self;
     msg.to   = n;
@@ -352,14 +356,18 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
     msg.len  = ID_BITS/4;
     msg.content = content;
 
+    log_info("built msg");
     return node_connect_and_send_message(self, &msg, node_found_remote_cb,
                                          node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
+    log_info("looking for successor");
+
     struct node_found_cb_data *cb_data;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
+        log_info("it's me");
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
         cb_data->cb           = cb;
@@ -373,6 +381,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
     }
     else
     if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
+        log_info("it's my succ");
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
         cb_data->cb           = cb;
@@ -385,6 +394,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         };
 
     }else{ // need to ask another node to find it
+        log_info("need to ask someone else");
         struct node_info n = node_closest_preceding_node(self, id); // node to ask
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -412,6 +422,9 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     cb_data->cb           = cb;
     cb_data->found_cb_arg = found_cb_arg;
 
+
+    log_info("asking for pred");
+
     node_connect_and_send_message(self, &msg, node_found_remote_cb,
                                   node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
@@ -433,6 +446,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 
 //found successor's predecessor (stabilize part 2)
 void node_stabilize_sp_found(struct node_info succ, void *arg){
+    log_info("got succ's pred for stab");
 
     struct node_self* self = (struct node_self*) arg;
 
@@ -449,6 +463,7 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
 
 void node_network_stabalize(struct node_self* self)
 {
+    log_info("stabilizing");
     node_get_predecessor_remote(self, self->successor, node_stabilize_sp_found, self);
 }
 
@@ -474,6 +489,7 @@ void node_notify_node(struct node_self* self, struct node_info node)
 
 void node_notified(struct node_self* self, struct node_info node)
 {
+    log_info("got notified");
     if (!self->has_pred || node_id_in_range(node.id, self->predecessor.id, self->self.id)){
         self->predecessor = node;
         self->has_pred = 1;
@@ -508,6 +524,7 @@ void node_fix_a_finger(struct node_self* self, int finger_num)
 
 void node_fix_fingers(struct node_self* self)
 {
+    log_info("fixing fingers");
     for(int fnum = 0; fnum < ID_BITS; ++fnum){
         node_fix_a_finger(self, fnum);
     }
@@ -524,10 +541,12 @@ void node_check_predecessor_reply(int connection, void *arg)
     token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
     if (!strncmp(token, "ALIVE", 5)){
         // HOORAY
+        log_info("pred is not dead");
     }else{
         // couldn't reach pred
         self->has_pred = 0;
         memset(&(self->predecessor), 0, sizeof(struct node_info));
+        log_info("pred is dead");
     }
     free(token);
     net_connection_close(self->net, connection);
@@ -549,6 +568,7 @@ void node_check_predecessor_event(int connection, short type, void *arg)
 void node_check_predecessor(struct node_self* self)
 {
     if (!self->has_pred){ return; }
+    log_info("checking predecessor");
 
     struct node_message msg;
     msg.from = self->self;
@@ -593,6 +613,9 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (!write_buf){
         return -1; }
+
+    log_info("got write buf");
+
     int rc = 0;
 
     if (msg->content != NULL){
@@ -603,10 +626,13 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
                                  node_msg_type_str(msg->type), 0);
     }
 
+    log_info("added content to buf");
+
     if (rc < 0){
         return rc;
     }
 
+    log_info("activating connection");
     return net_connection_activate(self->net, connection);
 }
 
@@ -623,6 +649,8 @@ int node_connect_and_send_message(struct node_self* self,
     #else
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
     #endif // USE_NETW
+
+    log_info("got connection %d", connection);
     if(connection < 0){
         // error creating connection
         return connection;
@@ -640,6 +668,7 @@ int node_connect_and_send_message(struct node_self* self,
         net_connection_set_cb_arg(self->net, connection, cb_arg);
     }
 
+    log_info("calling send msg");
     return node_send_message(self, msg, connection);
 }
 
@@ -677,12 +706,15 @@ void handle_pred_request(struct node_self* self, int connection)
 
 void handle_alive_request(struct node_self* self, int connection)
 {
+    log_info("alive req recvd");
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     evbuffer_add(write_buf, "ALIVE\n", 6);
 }
 
 void handle_message(struct node_self* self, struct node_message* msg, int connection)
 {
+
+    log_info("handling incoming msg");
 
     // for parsing msg body
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
@@ -749,6 +781,8 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
 
 int parse_msg_type(const char* typestr)
 {
+
+    log_info("msg of type %s", typestr);
     if (strcmp(typestr, REQ_SUCCESSOR) == 0){
         return MSG_T_SUCC_REQ;
     }
@@ -822,6 +856,7 @@ void incoming_event_cb(int connection, short type, void *arg)
 
 void incoming_read_cb(int connection, void *arg)
 {
+    log_info("incomming read cb");
     struct node_self* self = (struct node_self*) arg;
 
     struct node_message msg;
@@ -851,6 +886,8 @@ void incoming_read_cb(int connection, void *arg)
 
 void incoming_connection(int connection, short type, void *arg)
 {
+
+    log_info("incoming connection cb");
     struct node_self* self = (struct node_self*) arg;
     net_connection_set_read_cb(self->net, connection, incoming_read_cb);
     net_connection_set_event_cb(self->net, connection, incoming_event_cb);
