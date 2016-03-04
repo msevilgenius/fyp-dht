@@ -23,6 +23,8 @@ typedef void (*net_connection_event_cb_t)(int connection, short type, void *arg)
 
 struct net_server* net_server_create(const uint16_t port, net_connection_event_cb_t incoming_connection_cb, void* incoming_cb_arg);
 
+void net_server_set_incoming_cb_arg(struct net_server *srv, void* arg);
+
 void net_server_destroy(struct net_server* srv);
 
 int net_server_run(struct net_server* srv);

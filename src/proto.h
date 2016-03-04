@@ -49,6 +49,8 @@ resp: yes i am here
 #define REQ_ALIVE "ALIVE?"
 #define RESP_ALIVE "ALIVE"
 
+#define NODE_MSG "NODEMSG"
+
 #define MES_END ("\n\n")
 
 /*

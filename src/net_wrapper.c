@@ -64,6 +64,7 @@ struct net_server* netw_net_server_create(const uint16_t port)
 {
     struct net_server* srv = net_server_create(port, netw_incomming_cb, NULL);
 
+    net_server_set_incoming_cb_arg(srv, srv);
 
     return srv;
 }

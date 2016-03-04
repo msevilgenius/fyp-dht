@@ -17,6 +17,7 @@
 #define MSG_T_PRED_REQ  5
 #define MSG_T_ALIVE_REP 6
 #define MSG_T_ALIVE_REQ 7
+#define MSG_T_NODE_MSG  8
 #define MSG_T_UNKNOWN (-1)
 
 const struct timeval *NODE_WAIT_TM_DEFAULT = NULL;
@@ -31,6 +32,8 @@ struct node_self{
     short has_pred;
     struct node_info* finger_table;
     struct net_server* net;
+    node_msg_cb_t msg_cb;
+    void* msg_cb_arg;
 #ifdef USE_NETW
     int netw_handle;
 #endif // USE_NETW
@@ -159,13 +162,26 @@ struct net_server* node_get_net(struct node_self* self)
 // node network join/create
 //
 
+
+void node_set_node_msg_handler(struct node_self* self, node_msg_cb_t node_msg_cb, void* cb_arg)
+{
+    self->msg_cb = node_msg_cb;
+    self->msg_cb_arg = cb_arg;
+}
+
+
 void node_network_joined(evutil_socket_t fd, short what, void *arg)
 {
+    printf("network joined\n");
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
     cb_data->joined_cb(cb_data->joined_cb_arg);
+    printf("got cb data\n");
 
     struct node_self* self = cb_data->self;
+    printf("got self\n%X\n", self);
+    if (!self) printf("uhoh2!\n");
     struct event_base *base = net_get_base(self->net);
+    printf("got base\n");
 
     struct event* stabilise_tm_ev;
     struct event* fix_finger_tm_ev;
@@ -173,18 +189,23 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
     struct timeval stab_tm = {STABILIZE_PERIOD, 0};
     const struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
+    printf("got common timeval\n");
 
     stabilise_tm_ev  = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_stabilise,   (void*) self);
     fix_finger_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_fix_fingers, (void*) self);
     check_pred_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_check_pred,  (void*) self);
 
+    printf("created stab evs\n");
+
     event_add(stabilise_tm_ev, stab_tm_comm);
     event_add(fix_finger_tm_ev, stab_tm_comm);
     event_add(check_pred_tm_ev, stab_tm_comm);
     //TODO call all stabs now?
+    printf("added stab evs\n");
 
 
     free(cb_data);
+    printf("freed cb data\n");
 }
 
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
@@ -196,9 +217,12 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 
     cb_data->joined_cb = join_cb;
     cb_data->joined_cb_arg = arg;
+    cb_data->self = self;
 
-    event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
+    struct timeval tmo = {0,1};
+    event_base_once(net_get_base(self->net), -1, EV_TIMEOUT, node_network_joined, cb_data, &tmo);
 
+    printf("running server...\n");
     return net_server_run(self->net);
 }
 
@@ -206,10 +230,13 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
 {
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
 
+    printf("succ found for join\n");
+
     struct node_self* self = cb_data->self;
     self->successor = succ;
 
-    event_base_once(net_get_base(self->net), -1, 0, node_network_joined, cb_data, NULL);
+    struct timeval tmo = {0,1};
+    event_base_once(net_get_base(self->net), -1, EV_TIMEOUT, node_network_joined, cb_data, &tmo);
 }
 
 int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg)
@@ -225,6 +252,7 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
     cb_data->cb = node_network_join_succ_found;
     self->has_pred = 0; // nil
     node_find_successor_remote(self, node, self->self.id, cb_data);
+    printf("running server...\n");
     return net_server_run(self->net);
 }
 
@@ -553,6 +581,8 @@ char* node_msg_type_str(int msg_type){
             return RESP_PREDECESSOR;
         case MSG_T_SUCC_REP:
             return RESP_SUCCESSOR;
+        case MSG_T_NODE_MSG:
+            return NODE_MSG;
         default:
             return "NONE";
     }
@@ -697,6 +727,11 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
             net_connection_close(self->net, connection);
             break;
 
+        case MSG_T_NODE_MSG:
+            self->msg_cb(self, msg, connection, self->msg_cb_arg);
+            break;
+
+
 
 
         case MSG_T_SUCC_REP:
@@ -706,9 +741,9 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
         case MSG_T_ALIVE_REP:
             break;
     }
-
+/*
     if (msg->len > 0){
-        free(msg->content);}
+        free(msg->content);}*/
     return;
 }
 
@@ -734,6 +769,9 @@ int parse_msg_type(const char* typestr)
     }
     if (strcmp(typestr, REQ_NOTIFY) == 0){
         return MSG_T_NOTIF;
+    }
+    if (strcmp(typestr, NODE_MSG) == 0){
+        return MSG_T_NODE_MSG;
     }
     return MSG_T_UNKNOWN;
 }

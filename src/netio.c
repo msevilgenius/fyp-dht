@@ -34,7 +34,7 @@ struct net_conn_cb_arg{
 
 int net_valid_connection_num(int connection)
 {
-    return (connection < 0 || connection >= MAX_OPEN_CONNECTIONS);
+    return !(connection < 0 || connection >= MAX_OPEN_CONNECTIONS);
 }
 
 // must use locks with this!!!
@@ -138,6 +138,11 @@ struct net_server* net_server_create(const uint16_t port, net_connection_event_c
     return srv;
 }
 
+void net_server_set_incoming_cb_arg(struct net_server *srv, void* arg)
+{
+    srv->incoming_handler_arg = arg;
+}
+
 void net_server_destroy(struct net_server* srv)
 {
     if(srv){
@@ -155,6 +160,7 @@ void net_server_destroy(struct net_server* srv)
 
 struct event_base* net_get_base(struct net_server* srv)
 {
+    if (!srv) printf("uhoh\n");
     return srv->base;
 }
 
@@ -212,6 +218,7 @@ int net_server_run(struct net_server* srv)
 
 int net_connection_create(struct net_server* srv, const uint32_t IP, const uint16_t port)
 {
+    if(!srv) printf("uhoh!!!11!!\n");
     struct event_base *base = srv->base;
 
     pthread_mutex_lock(&(srv->connections_lock));

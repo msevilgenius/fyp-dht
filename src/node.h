@@ -1,8 +1,6 @@
 #ifndef DHT_H
 #define DHT_H
 
-#define USE_NETW
-
 #include <stdint.h>
 #include <event2/buffer.h>
 
@@ -33,6 +31,7 @@ struct node_message{
 
 typedef void (*on_join_cb_t)(void* arg);
 typedef void (*node_found_cb_t)(struct node_info, void *);
+typedef void (*node_msg_cb_t)(struct node_self*, struct node_message*, int, void *);
 
 struct node_self* node_create(uint16_t listen_port, char* name);
 
@@ -45,6 +44,8 @@ struct net_server* node_get_net(struct node_self* self);
  *
  */
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg);
+
+void node_set_node_msg_handler(struct node_self* self, node_msg_cb_t, void* cb_arg);
 
 
 /**
