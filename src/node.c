@@ -675,6 +675,7 @@ int node_connect_and_send_message(struct node_self* self,
 
 void node_successor_found_for_remote(struct node_info succ, void *data)
 {
+    log_info("successor foud for remote at %08X:%d", succ.IP, succ.port);
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
     struct evbuffer* write_buf = net_connection_get_write_buffer(
                                  handler_data->self->net, handler_data->connection);
@@ -686,6 +687,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
 
 void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
 {
+    log_info("handling succ req");
     struct incoming_handler_data *handler_data;
     handler_data = malloc(sizeof(struct incoming_handler_data));
     handler_data->self = self;
@@ -695,6 +697,7 @@ void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
 
 void handle_pred_request(struct node_self* self, int connection)
 {
+    log_info("handling pred req");
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (self->has_pred){
         evbuffer_add_printf(write_buf, "OKAY\n%X\n%X\n%X\n",
@@ -725,10 +728,13 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
     hash_type r_id;
     struct node_info other;
 
+    log_info("switching %d ", msg->type);
     switch (msg->type){
 
         case MSG_T_SUCC_REQ:
+            log_info("case MSG_T_SUCC_REQ");
             token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+            log_info("read line");
             endptr = NULL;
             r_id = strtoull(token, &endptr, 16);
             free(token);
@@ -744,6 +750,7 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
             break;
 
         case MSG_T_NOTIF:
+            log_info("handling notif req");
             token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
             endptr = NULL;
             other.id = strtoull(token, &endptr, 16);
@@ -760,6 +767,7 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
             break;
 
         case MSG_T_NODE_MSG:
+            log_info("handing msg to node");
             self->msg_cb(self, msg, connection, self->msg_cb_arg);
             break;
 

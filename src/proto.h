@@ -54,6 +54,7 @@ resp: yes i am here
 #define MES_END ("\n\n")
 
 /*
+ * TLV proto pls
 ########\n              from
 ########\n              to
 REQ_XXXXXX\n            message type
