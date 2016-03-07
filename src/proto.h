@@ -1,8 +1,8 @@
 #ifndef PROTO_H
 #define PROTO_H
 
-#define MSG_FMT "%X\n%X\n%s\n%d\n"
-#define MSG_FMT_CONTENT "%X\n%X\n%s\n%d\n%s"
+#define MSG_FMT "%c%08X"
+#define MSG_FMT_CONTENT "%c%08X%s"
 
 /* msg body node data : "%X\n%X\n%X\n"
 
@@ -19,8 +19,8 @@ resp: successor [of id] is s_id
   --s_id needs actual address not just hash id
 */
 
-#define REQ_SUCCESSOR "GET_SUCC"
-#define RESP_SUCCESSOR "GOT_SUCC"
+#define MSG_T_SUCC_REQ 'S'
+#define MSG_T_SUCC_REP 's'
 
 /*
 stabilize:
@@ -28,8 +28,8 @@ req: who is your predecessor?
 resp: predecessor is id
 */
 
-#define REQ_PREDECESSOR "GET_PRED"
-#define RESP_PREDECESSOR "GOT_PRED"
+#define MSG_T_PRED_REQ 'P'
+#define MSG_T_PRED_REP 'p'
 
 /*
 notify:
@@ -37,8 +37,8 @@ req: notify id
 resp: [ok]
 */
 
-#define REQ_NOTIFY "NOTIF"
-#define RESP_NOTIFY "NOTIFD" // is this necessary ?
+#define MSG_T_NOTIF 'N'
+#define MSG_T_NOTIFIED 'n' // is this necessary ?
 
 /*
 check_predecessor:
@@ -46,19 +46,18 @@ req: are you there
 resp: yes i am here
 */
 
-#define REQ_ALIVE "ALIVE?"
-#define RESP_ALIVE "ALIVE"
+#define MSG_T_ALIVE_REQ 'A'
+#define MSG_T_ALIVE_REP 'a'
 
-#define NODE_MSG "NODEMSG"
+#define MSG_T_NODE_MSG 'M'
 
-#define MES_END ("\n\n")
+#define MSG_T_UNKNOWN '0'
 
+#define LEN_STR_BYTES 8
 /*
- * TLV proto pls
-########\n              from
-########\n              to
-REQ_XXXXXX\n            message type
-NNNN\n                  content length
+ * TLV proto pls        what                    size
+R                       message type            1
+XXXXXXXX                content length          4
 ASJDGKADBJOTJGEJB...    [content]
 */
 

@@ -695,6 +695,13 @@ void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
     node_find_successor(self, r_id, node_successor_found_for_remote, handler_data);
 }
 
+void handle_alive_request(struct node_self* self, int connection)
+{
+    log_info("alive req recvd");
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
+    evbuffer_add(write_buf, "ALIVE\n", 6);
+}
+
 void handle_pred_request(struct node_self* self, int connection)
 {
     log_info("handling pred req");
@@ -707,11 +714,55 @@ void handle_pred_request(struct node_self* self, int connection)
     }
 }
 
-void handle_alive_request(struct node_self* self, int connection)
+
+
+void handle_succ_request(int connection, void *arg)
 {
-    log_info("alive req recvd");
+    log_info("handling succ req");
+    struct incoming_handler_data *handler_data;
+    handler_data = malloc(sizeof(struct incoming_handler_data));
+    handler_data->self = self;
+    handler_data->connection = connection;
+    node_find_successor(self, r_id, node_successor_found_for_remote, handler_data);
+}
+
+void handle_pred_request(int connection, void *arg)
+{
+    log_info("handling pred req");
+    struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
+    if (self->has_pred){
+        evbuffer_add_printf(write_buf, "OKAY\n%X\n%X\n%X\n",
+                            self->predecessor.id, self->predecessor.IP, self->predecessor.port);
+    }else{
+        evbuffer_add(write_buf, "NONE\n", 5);
+    }
+}
+
+void handle_alive_request(int connection, void *arg)
+{
+    log_info("handling alive req");
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     evbuffer_add(write_buf, "ALIVE\n", 6);
+}
+
+handle_notif_request(int connection, void *arg)
+{
+    log_info("handling notif req");
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+
+    token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+    endptr = NULL;
+    other.id = strtoull(token, &endptr, 16);
+    free(token);
+
+    token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
+    endptr = NULL;
+    other.port = strtoull(token, &endptr, 16);
+    free(token);
+
+    other.IP = net_connection_get_remote_address(self->net, connection);
+    node_notified(self, other);
+    net_connection_close(self->net, connection);
 }
 
 void handle_message(struct node_self* self, struct node_message* msg, int connection)
@@ -781,75 +832,24 @@ void handle_message(struct node_self* self, struct node_message* msg, int connec
         case MSG_T_ALIVE_REP:
             break;
     }
-/*
-    if (msg->len > 0){
-        free(msg->content);}*/
-    return;
-}
-
-int parse_msg_type(const char* typestr)
-{
-
-    log_info("msg of type %s", typestr);
-    if (strcmp(typestr, REQ_SUCCESSOR) == 0){
-        return MSG_T_SUCC_REQ;
-    }
-    if (strcmp(typestr, RESP_SUCCESSOR) == 0){
-        return MSG_T_SUCC_REP;
-    }
-    if (strcmp(typestr, REQ_PREDECESSOR) == 0){
-        return MSG_T_PRED_REQ;
-    }
-    if (strcmp(typestr, RESP_PREDECESSOR) == 0){
-        return MSG_T_PRED_REP;
-    }
-    if (strcmp(typestr, REQ_ALIVE) == 0){
-        return MSG_T_ALIVE_REQ;
-    }
-    if (strcmp(typestr, RESP_ALIVE) == 0){
-        return MSG_T_ALIVE_REP;
-    }
-    if (strcmp(typestr, REQ_NOTIFY) == 0){
-        return MSG_T_NOTIF;
-    }
-    if (strcmp(typestr, NODE_MSG) == 0){
-        return MSG_T_NODE_MSG;
-    }
-    return MSG_T_UNKNOWN;
 }
 
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
 {
-    int header_len = 0;
-    size_t line_len;
-
     char* endptr;
-    char* token;
-
-    // from id
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg->from.id = strtoull(token, &endptr, 16);
-    header_len += line_len + 1;
-    free(token);
-
-    // to id
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg->to.id = strtoull(token, &endptr, 16);
-    header_len += line_len + 1;
-    free(token);
+    char lenstr[LEN_STR_BYTES + 1];
 
     // type of message
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    if ((msg->type = parse_msg_type(token) == MSG_T_UNKNOWN)) {
-            return -1; }
-    header_len += line_len + 1;
-    free(token);
+    if (evbuffer_remove(read_buf, &(msg->type), 1) == -1)
+    {
+        // error reading
+        return -1;
+    }
 
     // length of content or 0 if none
-    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
-    msg->len = (int) strtoul(token, &endptr, 10);
-    header_len += line_len + 1;
-    free(token);
+    token = evbuffer_remove(read_buf, lenstr, LEN_STR_BYTES);
+    lenstr[LEN_STR_BYTES] = '\0';
+    msg->len = (uint32_t) strtoul(lenstr, &endptr, 16);
     return 0;
 }
 
@@ -875,20 +875,37 @@ void incoming_read_cb(int connection, void *arg)
         net_connection_close(self->net, connection);
         return;
     }
-/*
-    if (msg.len > 0){
-        msg.content = malloc(sizeof(char)*msg.len);
-        int copied = evbuffer_remove(read_buf, msg.content, msg.len);
-        if (copied == -1) {
-            // TODO error reading
-        }
-        if (copied < msg.len){
-            // TODO not enough data
-        }
-    }else{
-        msg.content = NULL;
+    switch (msg->type){
+
+        case MSG_T_SUCC_REQ:
+            net_connection_set_read_cb(self->net, connection, handle_succ_request);
+            break;
+
+        case MSG_T_PRED_REQ:
+            net_connection_set_read_cb(self->net, connection, handle_pred_request);
+            break;
+
+        case MSG_T_ALIVE_REQ:
+            net_connection_set_read_cb(self->net, connection, handle_alive_request);
+            break;
+
+        case MSG_T_NOTIF:
+            net_connection_set_read_cb(self->net, connection, handle_notif_request);
+            break;
+
+        case MSG_T_NODE_MSG:
+            net_connection_set_read_cb(self->net, connection, handle_node_message);
+            break;
+
+        case MSG_T_SUCC_REP:
+        case MSG_T_PRED_REP:
+        case MSG_T_ALIVE_REP:
+            break;
     }
-*/
+
+    struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
+    bufferevent_setwatermark(bufev, EV_READ, msg.len, 0);
+
     handle_message(self, &msg, connection);
 }
 
@@ -901,4 +918,6 @@ void incoming_connection(int connection, short type, void *arg)
     net_connection_set_event_cb(self->net, connection, incoming_event_cb);
     net_connection_set_cb_arg(self->net, connection, (void*)self);
     net_connection_set_timeouts(self->net, connection, NODE_WAIT_TM_DEFAULT, NODE_WAIT_TM_DEFAULT);
+    struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
+    bufferevent_setwatermark(bufev, EV_READ, 1 + LEN_STR_BYTES, 0);
 }

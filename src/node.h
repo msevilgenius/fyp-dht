@@ -24,8 +24,8 @@ struct finger_update_arg;
 struct node_message{
     struct node_info to;
     struct node_info from;
-    int type;
-    int len;
+    char type;
+    uint32_t len;
     char* content;
 };
 
