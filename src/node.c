@@ -765,6 +765,11 @@ void handle_notif_request(int connection, void *arg)
     net_connection_close(self->net, connection);
 }
 
+void handle_node_message(int connection, void *arg)
+{
+    // TODO give msg to app layer when read
+}
+
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
 {
     char* endptr;
@@ -778,9 +783,11 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
     }
 
     // length of content or 0 if none
-    token = evbuffer_remove(read_buf, lenstr, LEN_STR_BYTES);
-    lenstr[LEN_STR_BYTES] = '\0';
-    msg->len = (uint32_t) strtoul(lenstr, &endptr, 16);
+    if (evbuffer_remove(read_buf, (char*)&(msg->len), LEN_STR_BYTES) == -1)
+    {
+        // error reading
+        return -1;
+    }
     return 0;
 }
 
@@ -808,7 +815,7 @@ void incoming_read_cb(int connection, void *arg)
         net_connection_close(self->net, connection);
         return;
     }
-    switch (msg->type){
+    switch (msg.type){
 
         case MSG_T_SUCC_REQ:
             net_connection_set_read_cb(self->net, connection, handle_succ_request);
