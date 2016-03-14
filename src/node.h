@@ -8,6 +8,7 @@
 #include "netio.h"
 
 #define ID_BITS 32
+#define ID_BYTES (ID_BITS/8)
 #define ID_HEX_CHARS (ID_BITS/4)
 #define FINGER_SIZE_INIT 6
 // wait 20 secs before timout node
