@@ -358,7 +358,7 @@ int net_connection_activate(struct net_server* srv, const int conn)
     return -1;
 }
 
-struct evbuffer* net_connection_get_bufev(struct net_server* srv, const int conn)
+struct bufferevent* net_connection_get_bufev(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
         return srv->connections[conn].bev;

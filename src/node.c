@@ -170,7 +170,7 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
     log_info("got cb data\n");
 
     struct node_self* self = cb_data->self;
-    log_info("got self\n%X\n", self);
+    log_info("got self\n%X\n", self); // TODO remove
     struct event_base *base = net_get_base(self->net);
     log_info("got base\n");
 
