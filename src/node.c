@@ -610,6 +610,7 @@ char* node_msg_type_str(int msg_type){
 
 int node_send_message(struct node_self* self, struct node_message* msg, const int connection)
 {
+    log_info("node_send_message type: %c", msg->type);
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (!write_buf){
         return -1; }
@@ -619,10 +620,10 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
     int rc = 0;
 
     if (msg->content != NULL){
-        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT, msg->from.id, msg->to.id,
+        rc = evbuffer_add_printf(write_buf, MSG_FMT_CONTENT,
                                  node_msg_type_str(msg->type), msg->len, msg->content);
     }else{
-        rc = evbuffer_add_printf(write_buf, MSG_FMT, msg->from.id, msg->to.id,
+        rc = evbuffer_add_printf(write_buf, MSG_FMT,
                                  node_msg_type_str(msg->type), 0);
     }
 
@@ -685,6 +686,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
     free(handler_data);
 }
 
+// TODO remove
 void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
 {
     log_info("handling succ req");
@@ -695,6 +697,7 @@ void handle_succ_request(struct node_self* self, int connection, hash_type r_id)
     node_find_successor(self, r_id, node_successor_found_for_remote, handler_data);
 }
 
+// TODO remove
 void handle_alive_request(struct node_self* self, int connection)
 {
     log_info("alive req recvd");
@@ -702,6 +705,7 @@ void handle_alive_request(struct node_self* self, int connection)
     evbuffer_add(write_buf, "ALIVE\n", 6);
 }
 
+// TODO remove
 void handle_pred_request(struct node_self* self, int connection)
 {
     log_info("handling pred req");
@@ -715,10 +719,16 @@ void handle_pred_request(struct node_self* self, int connection)
 }
 
 
-
+// TODO
 void handle_succ_request(int connection, void *arg)
 {
     log_info("handling succ req");
+
+    hash_type r_id;
+    struct node_self* self = (struct node_self*) arg;
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+    int rc = evbuffer_remove(read_buf, &rid, sizeof(hash_type));
+
     struct incoming_handler_data *handler_data;
     handler_data = malloc(sizeof(struct incoming_handler_data));
     handler_data->self = self;
@@ -726,28 +736,35 @@ void handle_succ_request(int connection, void *arg)
     node_find_successor(self, r_id, node_successor_found_for_remote, handler_data);
 }
 
+// TODO
 void handle_pred_request(int connection, void *arg)
 {
     log_info("handling pred req");
+    struct node_self* self = (struct node_self*) arg;
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (self->has_pred){
-        evbuffer_add_printf(write_buf, "OKAY\n%X\n%X\n%X\n",
+        log_info("pred is Y%08X%08X%04X", self->predecessor.id, self->predecessor.IP, self->predecessor.port);
+        evbuffer_add_printf(write_buf, "Y%08X%08X%04X", // len: 21 bytes
                             self->predecessor.id, self->predecessor.IP, self->predecessor.port);
     }else{
-        evbuffer_add(write_buf, "NONE\n", 5);
+        log_info("No pred");
+        evbuffer_add(write_buf, "N", 1);
     }
 }
 
 void handle_alive_request(int connection, void *arg)
 {
     log_info("handling alive req");
+    struct node_self* self = (struct node_self*) arg;
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     evbuffer_add(write_buf, "ALIVE\n", 6);
 }
 
-handle_notif_request(int connection, void *arg)
+// TODO
+void handle_notif_request(int connection, void *arg)
 {
     log_info("handling notif req");
+    struct node_self* self = (struct node_self*) arg;
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 
     token = evbuffer_readln(read_buf, &read_len, EVBUFFER_EOL_LF);
@@ -765,6 +782,7 @@ handle_notif_request(int connection, void *arg)
     net_connection_close(self->net, connection);
 }
 
+// TODO remove
 void handle_message(struct node_self* self, struct node_message* msg, int connection)
 {
 
@@ -861,6 +879,7 @@ void incoming_event_cb(int connection, short type, void *arg)
     }
 }
 
+//initial read evt (reads header and sets body handler)
 
 void incoming_read_cb(int connection, void *arg)
 {
@@ -905,8 +924,6 @@ void incoming_read_cb(int connection, void *arg)
 
     struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
     bufferevent_setwatermark(bufev, EV_READ, msg.len, 0);
-
-    handle_message(self, &msg, connection);
 }
 
 void incoming_connection(int connection, short type, void *arg)
