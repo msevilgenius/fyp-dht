@@ -12,6 +12,7 @@
 
 #include "net_wrapper.h"
 #include "node.h"
+#include "proto.h"
 
 struct node_self *node;
 struct net_server* net;
@@ -66,6 +67,11 @@ void node_found(struct node_info ninfo, void* arg)
 {
     printf("found node\n");
     char *msg = (char*) arg;
+    struct node_message nmsg;
+    nmsg.to = ninfo;
+    nmsg.content = msg;
+    nmsg.len = strlen(msg);
+    nmsg.type = MSG_T_NODE_MSG;
     /*
     int conn = netw_net_connection_create(net, ninfo.IP, ninfo.port, handle);
     struct evbuffer* wbuf = net_connection_get_write_buffer(net, conn);
@@ -77,7 +83,7 @@ void node_found(struct node_info ninfo, void* arg)
     net_connection_activate(net, conn);
     */
     struct timeval tmo = {5,0};
-    node_connect_and_send_message(node, msg, NULL, out_conn_event, NULL, &tmo);
+    node_connect_and_send_message(node, &nmsg, NULL, out_conn_event, NULL, &tmo);
 
 
 }

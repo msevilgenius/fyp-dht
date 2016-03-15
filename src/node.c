@@ -35,6 +35,7 @@ struct node_join_cb_data{
     on_join_cb_t joined_cb;
     void *joined_cb_arg;
     struct node_self* self;
+    struct event* evt;
 };
 
 struct node_found_cb_data{
@@ -42,6 +43,7 @@ struct node_found_cb_data{
     node_found_cb_t cb;
     void* found_cb_arg;
     struct node_info node;
+    struct event* evt;
 };
 
 struct finger_update_arg{
@@ -211,7 +213,15 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     cb_data->self = self;
 
     struct timeval tmo = {0,1};
-    event_base_once(net_get_base(self->net), -1, EV_TIMEOUT, node_network_joined, cb_data, &tmo);
+    struct event* crtevt;
+    crtevt = event_new(net_get_base(self->net), -1, 0, node_network_joined, cb_data);
+    if (!crtevt){
+        free(cb_data);
+        return -1;
+    }else{
+        cb_data->evt = crtevt;
+    }
+    event_active(crtevt, 0, 0);
 
     log_info("running server...\n");
     return net_server_run(self->net);
@@ -226,8 +236,14 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
     struct node_self* self = cb_data->self;
     self->successor = succ;
 
-    struct timeval tmo = {0,1};
-    event_base_once(net_get_base(self->net), -1, EV_TIMEOUT, node_network_joined, cb_data, &tmo);
+    struct event* crtevt;
+    crtevt = event_new(net_get_base(self->net), -1, 0, node_network_joined, cb_data);
+    if (!crtevt){
+        free(cb_data);
+    }else{
+        cb_data->evt = crtevt;
+        event_active(crtevt, 0, 0);
+    }
 }
 
 int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg)
@@ -275,9 +291,12 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 
 void node_found(evutil_socket_t fd, short what, void *arg)
 {
-    log_info("found node");
+    log_info("found node ----");
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
+    if (cb_data->evt){
+        event_free(cb_data->evt);
+    }
     free(cb_data);
 }
 
@@ -357,6 +376,7 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
     log_info("looking for successor");
+    struct event* fndev;
 
     struct node_found_cb_data *cb_data;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
@@ -367,10 +387,14 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         cb_data->found_cb_arg = found_cb_arg;
         cb_data->node         = self->self;
 
-        if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+        fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
+        if (!fndev){
             free(cb_data);
             return -1;
-        };
+        }else{
+            cb_data->evt = fndev;
+        }
+        event_active(fndev, 0, 0);
     }
     else
     if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
@@ -381,10 +405,14 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         cb_data->found_cb_arg = found_cb_arg;
         cb_data->node         = self->successor;
 
-        if (event_base_once(net_get_base(self->net), -1, 0, node_found, cb_data, NULL) == -1){
+        fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
+        if (!fndev){
             free(cb_data);
             return -1;
-        };
+        }else{
+            cb_data->evt = fndev;
+        }
+        event_active(fndev, 0, 0);
 
     }else{ // need to ask another node to find it
         log_info("need to ask someone else");
