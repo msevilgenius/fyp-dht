@@ -104,21 +104,21 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
     if (!node->finger_table){
-            free(node);
-            return NULL; }
+        free(node);
+        return NULL; }
 
-    #ifdef USE_NETW
+#ifdef USE_NETW
     netw_init();
     node->net = netw_net_server_create(listen_port);
     netw_register_handler(incoming_connection, (void*) node);
-    #else
+#else
     node->net = net_server_create(listen_port, incoming_connection, (void*) node);
-    #endif // USE_NETW
+#endif // USE_NETW
 
     if (!node->net){
-            free(node->finger_table);
-            free(node);
-            return NULL; }
+        free(node->finger_table);
+        free(node);
+        return NULL; }
 
     struct event_base* base = net_get_base(node->net);
 
@@ -137,9 +137,9 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 
 void node_destroy(struct node_self* n)
 {
-    #ifdef USE_NETW
+#ifdef USE_NETW
     netw_destroy();
-    #endif // USE_NETW
+#endif // USE_NETW
 
     if (!n) { return; }
     if (n->net){ net_server_destroy(n->net); }
@@ -320,8 +320,8 @@ void node_found_remote_cb(int connection, void *arg)
         cb_data->node.port = 0;
     }else{
         if(evbuffer_remove(read_buf, (char*)&(cb_data->node.id), ID_BYTES) < 0 ||
-           evbuffer_remove(read_buf, (char*)&(cb_data->node.IP), 4) < 0 ||
-           evbuffer_remove(read_buf, (char*)&(cb_data->node.port), 2) < 0)
+                evbuffer_remove(read_buf, (char*)&(cb_data->node.IP), 4) < 0 ||
+                evbuffer_remove(read_buf, (char*)&(cb_data->node.port), 2) < 0)
         {
             log_info("found? but error reading");
             net_connection_close(self->net, connection);
@@ -347,7 +347,7 @@ void node_remote_find_event(int connection, short type, void *arg)
 
 //ask node n for successor of id
 int node_find_successor_remote(struct node_self* self, struct node_info n,
-                               hash_type id, struct node_found_cb_data* cb_data)
+        hash_type id, struct node_found_cb_data* cb_data)
 {
     log_info("find_succ_remote");
     struct node_message msg;
@@ -359,7 +359,7 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
 
     log_info("built msg");
     int conn = node_connect_and_send_message(self, &msg, node_found_remote_cb,
-                                         node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
+            node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
     if (conn < 0){
         return conn;
     }
@@ -375,7 +375,9 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
-    log_info("looking for successor");
+    log_info("looking for successor of %08X", id);
+    log_info("my id is %08X",self->self.id);
+    log_info("my succ's id is %08X",self->successor.id);
     struct event* fndev;
 
     struct node_found_cb_data *cb_data;
@@ -397,38 +399,38 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         event_active(fndev, 0, 0);
     }
     else
-    if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
-        log_info("it's my succ");
+        if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
+            log_info("it's my succ");
 
-        cb_data = malloc(sizeof(struct node_found_cb_data));
-        cb_data->cb           = cb;
-        cb_data->found_cb_arg = found_cb_arg;
-        cb_data->node         = self->successor;
+            cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->cb           = cb;
+            cb_data->found_cb_arg = found_cb_arg;
+            cb_data->node         = self->successor;
 
-        fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
-        if (!fndev){
-            free(cb_data);
-            return -1;
-        }else{
-            cb_data->evt = fndev;
+            fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
+            if (!fndev){
+                free(cb_data);
+                return -1;
+            }else{
+                cb_data->evt = fndev;
+            }
+            event_active(fndev, 0, 0);
+
+        }else{ // need to ask another node to find it
+            log_info("need to ask someone else");
+            struct node_info n = node_closest_preceding_node(self, id); // node to ask
+
+            cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->cb           = cb;
+            cb_data->found_cb_arg = found_cb_arg;
+
+            return node_find_successor_remote(self, n, id, cb_data);
         }
-        event_active(fndev, 0, 0);
-
-    }else{ // need to ask another node to find it
-        log_info("need to ask someone else");
-        struct node_info n = node_closest_preceding_node(self, id); // node to ask
-
-        cb_data = malloc(sizeof(struct node_found_cb_data));
-        cb_data->cb           = cb;
-        cb_data->found_cb_arg = found_cb_arg;
-
-        return node_find_successor_remote(self, n, id, cb_data);
-    }
     return 0;
 }
 
 void node_get_predecessor_remote(struct node_self* self, struct node_info n,
-                                 node_found_cb_t cb, void* found_cb_arg)
+        node_found_cb_t cb, void* found_cb_arg)
 {
     struct node_found_cb_data* cb_data;
     struct node_message msg;
@@ -447,7 +449,7 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     log_info("asking for pred");
 
     node_connect_and_send_message(self, &msg, node_found_remote_cb,
-                                  node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
+            node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
 }
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
@@ -474,10 +476,10 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
     if (succ.port == 0 && succ.IP == 0){ // successor doesn't know its predecessor
 
     }else
-    // if (me < s->p < s) then update me->s
-    if (node_id_in_range(succ.id, self->self.id, self->successor.id)){
-        self->successor = succ;
-    }
+        // if (me < s->p < s) then update me->s
+        if (node_id_in_range(succ.id, self->self.id, self->successor.id)){
+            self->successor = succ;
+        }
     // notify s
     node_notify_node(self, self->successor);
 }
@@ -604,7 +606,7 @@ void node_check_predecessor(struct node_self* self)
     msg.content = NULL;
 
     node_connect_and_send_message(self, &msg, node_check_predecessor_reply,
-                                  node_check_predecessor_event, (void*) self, NODE_WAIT_TM_DEFAULT);
+            node_check_predecessor_event, (void*) self, NODE_WAIT_TM_DEFAULT);
 }
 
 //
@@ -665,17 +667,17 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
 
 
 int node_connect_and_send_message(struct node_self* self,
-                                  struct node_message* msg,
-                                  net_connection_data_cb_t read_cb,
-                                  net_connection_event_cb_t event_cb,
-                                  void *cb_arg,
-                                  const struct timeval *timeout)
+        struct node_message* msg,
+        net_connection_data_cb_t read_cb,
+        net_connection_event_cb_t event_cb,
+        void *cb_arg,
+        const struct timeval *timeout)
 {
-    #ifdef USE_NETW
+#ifdef USE_NETW
     int connection = netw_net_connection_create(self->net, msg->to.IP, msg->to.port, self->netw_handle);
-    #else
+#else
     int connection = net_connection_create(self->net, msg->to.IP, msg->to.port);
-    #endif // USE_NETW
+#endif // USE_NETW
 
     log_info("got connection %d", connection);
     if(connection < 0){
@@ -711,7 +713,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
     log_info("successor found for remote at %08X:%d", succ.IP, succ.port);
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
     struct evbuffer* write_buf = net_connection_get_write_buffer(
-                                 handler_data->self->net, handler_data->connection);
+            handler_data->self->net, handler_data->connection);
 
     evbuffer_add(write_buf, "Y", 1);
     evbuffer_add(write_buf, (char*)&(succ.id), ID_BYTES);
@@ -781,10 +783,10 @@ void handle_notif_request(int connection, void *arg)
     other.IP = net_connection_get_remote_address(self->net, connection);
 
     if ( !other.IP ||
-        evbuffer_remove(read_buf, (char*)&(other.id), ID_BYTES) < 0 ||
-        evbuffer_remove(read_buf, (char*)&(other.port), 2) < 0)
+            evbuffer_remove(read_buf, (char*)&(other.id), ID_BYTES) < 0 ||
+            evbuffer_remove(read_buf, (char*)&(other.port), 2) < 0)
     {
-            // error
+        // error
         net_connection_close(self->net, connection);
     }
 
@@ -800,8 +802,6 @@ void handle_node_message(int connection, void *arg)
 
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
 {
-    char* endptr;
-    char lenstr[LEN_STR_BYTES + 1];
 
     // type of message
     if (evbuffer_remove(read_buf, &(msg->type), 1) == -1)
@@ -843,36 +843,69 @@ void incoming_read_cb(int connection, void *arg)
         net_connection_close(self->net, connection);
         return;
     }
+    if (evbuffer_get_length(read_buf) < msg.len){
+        switch (msg.type){
+
+            case MSG_T_SUCC_REQ:
+                net_connection_set_read_cb(self->net, connection, handle_succ_request);
+                break;
+
+            case MSG_T_PRED_REQ:
+                net_connection_set_read_cb(self->net, connection, handle_pred_request);
+                break;
+
+            case MSG_T_ALIVE_REQ:
+                net_connection_set_read_cb(self->net, connection, handle_alive_request);
+                break;
+
+            case MSG_T_NOTIF:
+                net_connection_set_read_cb(self->net, connection, handle_notif_request);
+                break;
+
+            case MSG_T_NODE_MSG:
+                net_connection_set_read_cb(self->net, connection, handle_node_message);
+                break;
+
+            case MSG_T_SUCC_REP:
+            case MSG_T_PRED_REP:
+            case MSG_T_ALIVE_REP:
+                break;
+        }
+
+        struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
+        bufferevent_setwatermark(bufev, EV_READ, msg.len, 0);
+    }
+    else{
     switch (msg.type){
 
-        case MSG_T_SUCC_REQ:
-            net_connection_set_read_cb(self->net, connection, handle_succ_request);
-            break;
+            case MSG_T_SUCC_REQ:
+                handle_succ_request(connection, (void*) self);
+                break;
 
-        case MSG_T_PRED_REQ:
-            net_connection_set_read_cb(self->net, connection, handle_pred_request);
-            break;
+            case MSG_T_PRED_REQ:
+                handle_pred_request(connection, (void*) self);
+                break;
 
-        case MSG_T_ALIVE_REQ:
-            net_connection_set_read_cb(self->net, connection, handle_alive_request);
-            break;
+            case MSG_T_ALIVE_REQ:
+                handle_alive_request(connection, (void*) self);
+                break;
 
-        case MSG_T_NOTIF:
-            net_connection_set_read_cb(self->net, connection, handle_notif_request);
-            break;
+            case MSG_T_NOTIF:
+                handle_notif_request(connection, (void*) self);
+                break;
 
-        case MSG_T_NODE_MSG:
-            net_connection_set_read_cb(self->net, connection, handle_node_message);
-            break;
+            case MSG_T_NODE_MSG:
+                handle_node_message(connection, (void*) self);
+                break;
 
-        case MSG_T_SUCC_REP:
-        case MSG_T_PRED_REP:
-        case MSG_T_ALIVE_REP:
-            break;
+            case MSG_T_SUCC_REP:
+            case MSG_T_PRED_REP:
+            case MSG_T_ALIVE_REP:
+                break;
+        }
+
+
     }
-
-    struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
-    bufferevent_setwatermark(bufev, EV_READ, msg.len, 0);
 }
 
 // called when listen socket accepts connection
