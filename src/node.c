@@ -56,6 +56,11 @@ struct incoming_handler_data{
     int connection;
 };
 
+struct node_msg_arg{
+    struct node_self* self;
+    struct node_message msg;
+};
+
 void node_tm_stabilise(evutil_socket_t fd, short what, void *arg);
 
 void node_tm_fix_fingers(evutil_socket_t fd, short what, void *arg);
@@ -203,6 +208,7 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 {
+    self->successor = self->self;
     self->predecessor = self->self;
     self->has_pred = 1;
 
@@ -389,17 +395,12 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         cb_data->found_cb_arg = found_cb_arg;
         cb_data->node         = self->self;
 
-        fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
-        if (!fndev){
-            free(cb_data);
-            return -1;
-        }else{
-            cb_data->evt = fndev;
-        }
-        event_active(fndev, 0, 0);
+        node_found(0, 0, cb_data);
     }
     else
-        if(node_id_in_range(id, self->self.id, self->successor.id)){ // id is between me and my successor
+        if(node_id_in_range(id, self->self.id, self->successor.id) ||
+                node_id_compare(self->self.id, self->successor.id) == 0)
+        { // id is between me and my successor
             log_info("it's my succ");
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -407,14 +408,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             cb_data->found_cb_arg = found_cb_arg;
             cb_data->node         = self->successor;
 
-            fndev = event_new(net_get_base(self->net), -1, 0, node_found, cb_data);
-            if (!fndev){
-                free(cb_data);
-                return -1;
-            }else{
-                cb_data->evt = fndev;
-            }
-            event_active(fndev, 0, 0);
+            node_found(0, 0, cb_data);
 
         }else{ // need to ask another node to find it
             log_info("need to ask someone else");
@@ -798,6 +792,11 @@ void handle_notif_request(int connection, void *arg)
 void handle_node_message(int connection, void *arg)
 {
     // TODO give msg to app layer when read
+    struct node_msg_arg* msgarg = (struct node_msg_arg*) arg;
+    struct node_self* self = msgarg->self;
+
+    (self->msg_cb)(self, &msgarg->msg, connection, self->msg_cb_arg);
+    free(msgarg);
 }
 
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)
@@ -838,6 +837,8 @@ void incoming_read_cb(int connection, void *arg)
     struct node_message msg;
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 
+    struct node_msg_arg* msgarg = malloc(sizeof(struct node_msg_arg));
+
     if (node_parse_message_header(&msg, read_buf) < 0){
         // error parsing msg
         net_connection_close(self->net, connection);
@@ -863,7 +864,11 @@ void incoming_read_cb(int connection, void *arg)
                 break;
 
             case MSG_T_NODE_MSG:
+                msgarg = malloc(sizeof(struct node_msg_arg));
+                msgarg->self = self;
+                msgarg->msg = msg;
                 net_connection_set_read_cb(self->net, connection, handle_node_message);
+                net_connection_set_cb_arg(self->net, connection, msgarg);
                 break;
 
             case MSG_T_SUCC_REP:
