@@ -301,6 +301,7 @@ void node_found(evutil_socket_t fd, short what, void *arg)
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
     if (cb_data->evt){
+        log_info("free evt");
         event_free(cb_data->evt);
     }
     free(cb_data);
@@ -408,7 +409,11 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             cb_data->found_cb_arg = found_cb_arg;
             cb_data->node         = self->successor;
 
+            log_info("calling node_found");
+            //log_info("not calling node_found");
+            //log_info(" calling test_find instead");
             node_found(0, 0, cb_data);
+            //test_find(0, 0, cb_data);
 
         }else{ // need to ask another node to find it
             log_info("need to ask someone else");
@@ -792,11 +797,14 @@ void handle_notif_request(int connection, void *arg)
 void handle_node_message(int connection, void *arg)
 {
     // TODO give msg to app layer when read
+    log_info("handle node msg called");
     struct node_msg_arg* msgarg = (struct node_msg_arg*) arg;
     struct node_self* self = msgarg->self;
 
     (self->msg_cb)(self, &msgarg->msg, connection, self->msg_cb_arg);
     free(msgarg);
+
+    log_info("handle node msg called");
 }
 
 int node_parse_message_header(struct node_message* msg, struct evbuffer* read_buf)

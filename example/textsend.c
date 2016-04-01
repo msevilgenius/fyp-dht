@@ -63,9 +63,9 @@ void out_conn_event(int connection, short type, void *arg)
     }
 }
 
-void node_found(struct node_info ninfo, void* arg)
+void found_node(struct node_info ninfo, void* arg)
 {
-    printf("found node\n");
+    printf("found node?\n");
     char *msg = (char*) arg;
     struct node_message nmsg;
     nmsg.to = ninfo;
@@ -97,7 +97,7 @@ void *in_thread(void *arg)
         while (!fgets(name, 256, stdin));
         printf("enter message\n");
         while (!fgets(msg, 1024, stdin));
-        node_find_successor(node, get_id(name), node_found, (void*)msg);
+        node_find_successor(node, get_id(name), found_node, (void*)msg);
     }
 }
 
@@ -110,7 +110,7 @@ void net_joined(void* arg)
 int main(int argc, char **argv){
 
     char* endptr;
-    uint16_t port = strtoul(argv[1], &endptr, 10);
+    uint16_t port = (uint16_t)strtoul(argv[1], &endptr, 10);
     printf("%s\n%d\n", argv[1], port);
 
 

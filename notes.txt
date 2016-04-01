@@ -74,6 +74,13 @@ instead of just setting watermark and new callback after parsing header, check i
 
 
 
+dont name a function in app "node_found" !!!!!
+
+segaault after event occured on incomming and outgoing conns when sending
+message to self
+
+caused because self in a function is not the same as the actual node_self that
+was created at the initialisation
 
 
 

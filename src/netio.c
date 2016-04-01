@@ -2,7 +2,8 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "netio.h"#include "logging.h"
+#include "netio.h"
+#include "logging.h"
 
 struct net_connection{
     struct bufferevent* bev;
@@ -104,18 +105,24 @@ struct net_server* net_server_create(const uint16_t port, net_connection_event_c
 
     memset(&serv_addr, 0, sizeof(struct sockaddr_in));
 
+    log_info("creating sin:\nport: %04X (%d)", port, port);
+
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(port);
 
+    log_info("created sin:\nport: %d", serv_addr.sin_port);
+
     srv = malloc(sizeof(struct net_server));
 
     if (!srv){ // malloc failed
+        log_err("failed to malloc server");
         return NULL;
     }
 
     srv->base = event_base_new();
     if (!srv->base){ // error creating base
+        log_err("failed to create event base");
         free(srv);
         return NULL;
     }
@@ -124,15 +131,20 @@ struct net_server* net_server_create(const uint16_t port, net_connection_event_c
     srv->incoming_handler_arg = incoming_cb_arg;
 
     srv->listener_evt = evconnlistener_new_bind(srv->base, listen_evt_cb, (void*) srv,
+#ifndef DNDEBUG
+                                LEV_OPT_REUSEABLE |
+#endif
                                 LEV_OPT_CLOSE_ON_FREE, -1,
                                 (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     if (!srv->listener_evt){ // error creating listener
+        log_err("failed to create listen socket");
         event_base_free(srv->base);
         free(srv);
         return NULL;
     }
 
     if (pthread_mutex_init(&(srv->connections_lock), NULL) != 0){
+        log_err("failed to create connections lock mutex");
         evconnlistener_free(srv->listener_evt);
         event_base_free(srv->base);
         free(srv);
@@ -172,7 +184,7 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg)
 {
 
-    log_info("listen event");
+    log_info("listen event callback");
     struct net_server *srv = (struct net_server *) arg;
 
     struct event_base* base = evconnlistener_get_base(listener);

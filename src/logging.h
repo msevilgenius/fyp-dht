@@ -3,7 +3,7 @@
 
 typedef enum {ERROR, WARN, INFO, OTHER} loglevel_t;
 
-#define log_err(M, ...) printf("[ERROR] (%s:%d) " M "\n", __FILE__, __LINE__), ##__VA_ARGS__)
+#define log_err(M, ...) printf("[ERROR] (%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
 #define log_warn(M, ...) printf("[WARN] (%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
