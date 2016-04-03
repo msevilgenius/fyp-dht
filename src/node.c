@@ -885,7 +885,7 @@ void incoming_read_cb(int connection, void *arg)
                 msgarg->self = self;
                 msgarg->msg = msg;
                 net_connection_set_read_cb(self->net, connection, handle_node_message);
-                net_connection_set_event_cb(self->net, connection, incoming_event_msg_cb)
+                net_connection_set_event_cb(self->net, connection, incoming_event_msg_cb);
                 net_connection_set_cb_arg(self->net, connection, msgarg);
                 break;
 
