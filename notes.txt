@@ -82,6 +82,7 @@ message to self
 caused because self in a function is not the same as the actual node_self that
 was created at the initialisation
 
+^ mostly solved (imperfect way that could still cause problems)
 
 
 
@@ -90,6 +91,12 @@ was created at the initialisation
 
 
 
+segfault on joining network
+after node.c:247 succ found for join
+
+
+
+also afetnode.c:313 free evt from fixing fingers
 
 
 

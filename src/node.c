@@ -99,7 +99,11 @@ void incoming_connection(int connection, short type, void *arg);
 struct node_self* node_create(uint16_t listen_port, char* name)
 {
     struct node_self* node = malloc(sizeof(struct node_self));
-    if(!node) { return NULL; }
+
+    if(!node) {
+        log_err("failed to malloc node");
+        return NULL;
+    }
 
     node->self.id = get_id(name);
     node->self.port = listen_port;
@@ -109,6 +113,7 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
     if (!node->finger_table){
+        log_err("failed to malloc finger table");
         free(node);
         return NULL; }
 
@@ -121,6 +126,7 @@ struct node_self* node_create(uint16_t listen_port, char* name)
 #endif // USE_NETW
 
     if (!node->net){
+        log_err("failed to create net");
         free(node->finger_table);
         free(node);
         return NULL; }
@@ -222,6 +228,7 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     struct event* crtevt;
     crtevt = event_new(net_get_base(self->net), -1, 0, node_network_joined, cb_data);
     if (!crtevt){
+        log_err("failed to create event");
         free(cb_data);
         return -1;
     }else{
@@ -245,6 +252,7 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
     struct event* crtevt;
     crtevt = event_new(net_get_base(self->net), -1, 0, node_network_joined, cb_data);
     if (!crtevt){
+        log_err("failed to create event");
         free(cb_data);
     }else{
         cb_data->evt = crtevt;
@@ -254,6 +262,7 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
 
 int node_network_join(struct node_self* self, struct node_info node, on_join_cb_t join_cb, void * cb_arg)
 {
+    // TODO check malloc worked
     struct node_found_cb_data* cb_data = malloc(sizeof(struct node_found_cb_data));
     struct node_join_cb_data* cb_cb_data = malloc(sizeof(struct node_join_cb_data));
 
@@ -321,7 +330,7 @@ void node_found_remote_cb(int connection, void *arg)
     rc = evbuffer_remove(read_buf, result, 1);
 
     if (result[0] != 'Y'){
-        log_info("couldn't find it");
+        log_warn("couldn't find it");
         cb_data->node.id = 0;
         cb_data->node.IP = 0;
         cb_data->node.port = 0;
@@ -330,7 +339,7 @@ void node_found_remote_cb(int connection, void *arg)
                 evbuffer_remove(read_buf, (char*)&(cb_data->node.IP), 4) < 0 ||
                 evbuffer_remove(read_buf, (char*)&(cb_data->node.port), 2) < 0)
         {
-            log_info("found? but error reading");
+            log_err("found? but error reading");
             net_connection_close(self->net, connection);
             cb_data->node.id = 0;
             cb_data->node.IP = 0;
@@ -343,6 +352,7 @@ void node_found_remote_cb(int connection, void *arg)
     node_found(-1, 0, cb_data);
 }
 
+// TODO maybe close an free stuff
 void node_remote_find_event(int connection, short type, void *arg)
 {
 
@@ -368,11 +378,13 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
     int conn = node_connect_and_send_message(self, &msg, node_found_remote_cb,
             node_remote_find_event, (void*) cb_data, NODE_WAIT_TM_LONG);
     if (conn < 0){
+        log_err("failed to create connection");
         return conn;
     }
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, conn);
 
     if (!write_buf){
+        log_err("failed to get write buffer");
         return -1;
     }
 
@@ -473,7 +485,7 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
     struct node_self* self = (struct node_self*) arg;
 
     if (succ.port == 0 && succ.IP == 0){ // successor doesn't know its predecessor
-
+        log_info("succ doesn't know its pred");
     }else
         // if (me < s->p < s) then update me->s
         if (node_id_in_range(succ.id, self->self.id, self->successor.id)){
@@ -813,15 +825,23 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
     // type of message
     if (evbuffer_remove(read_buf, &(msg->type), 1) == -1)
     {
+        log_err("failed to read msg type");
         // error reading
         return -1;
     }
 
     // length of content or 0 if none
-    if (evbuffer_remove(read_buf, (char*)&(msg->len), LEN_STR_BYTES) == -1)
+    char buf[LEN_STR_BYTES + 1] = { '\0' };
+    if (evbuffer_remove(read_buf, buf, LEN_STR_BYTES) == -1)
     {
+        log_err("failed to read msg length");
         // error reading
         return -1;
+    }
+    else
+    {
+        char *endptr;
+        msg->len = (uint32_t) strtoul(buf, &endptr, 16);
     }
     return 0;
 }
@@ -829,6 +849,7 @@ int node_parse_message_header(struct node_message* msg, struct evbuffer* read_bu
 // incoming connection event e.g. error eof
 void incoming_event_cb(int connection, short type, void *arg)
 {
+    log_info("incoming event");
     struct node_self* self = (struct node_self*) arg;
     if (type & (BEV_ERROR|BEV_EVENT_EOF)){ // close and free connection on error or closed by remote
         net_connection_close(self->net, connection);
@@ -838,8 +859,10 @@ void incoming_event_cb(int connection, short type, void *arg)
 // incoming connection event e.g. error eof after changing arg for NODE_MSG
 void incoming_event_msg_cb(int connection, short type, void *arg)
 {
+    log_info("incoming event (msg)");
     struct node_self* self = (struct node_self*) ( ( (struct node_msg_arg*)arg )->self );
     if (type & (BEV_ERROR|BEV_EVENT_EOF)){ // close and free connection on error or closed by remote
+        log_info("Error or EOF, closing connection");
         net_connection_close(self->net, connection);
     }
 }
@@ -857,11 +880,14 @@ void incoming_read_cb(int connection, void *arg)
     struct node_msg_arg* msgarg = malloc(sizeof(struct node_msg_arg));
 
     if (node_parse_message_header(&msg, read_buf) < 0){
+        log_err("error parsing incoming header");
         // error parsing msg
         net_connection_close(self->net, connection);
         return;
     }
     if (evbuffer_get_length(read_buf) < msg.len){
+
+        log_info("less data in buffer than msg length, setting handlers");
         switch (msg.type){
 
             case MSG_T_SUCC_REQ:
@@ -892,6 +918,8 @@ void incoming_read_cb(int connection, void *arg)
             case MSG_T_SUCC_REP:
             case MSG_T_PRED_REP:
             case MSG_T_ALIVE_REP:
+            default:
+                log_warn("unexpected message type recieved on icoming connection");
                 break;
         }
 
@@ -899,7 +927,8 @@ void incoming_read_cb(int connection, void *arg)
         bufferevent_setwatermark(bufev, EV_READ, msg.len, 0);
     }
     else{
-    switch (msg.type){
+        log_info("whole message already in buffer, calling handler");
+        switch (msg.type){
 
             case MSG_T_SUCC_REQ:
                 handle_succ_request(connection, (void*) self);
@@ -918,12 +947,18 @@ void incoming_read_cb(int connection, void *arg)
                 break;
 
             case MSG_T_NODE_MSG:
-                handle_node_message(connection, (void*) self);
+                log_info("sending node msg up");
+                msgarg = malloc(sizeof(struct node_msg_arg));
+                msgarg->self = self;
+                msgarg->msg = msg;
+                handle_node_message(connection, msgarg);
                 break;
 
             case MSG_T_SUCC_REP:
             case MSG_T_PRED_REP:
             case MSG_T_ALIVE_REP:
+            default:
+                log_warn("unexpected message type recieved on icoming connection");
                 break;
         }
 
