@@ -835,6 +835,15 @@ void incoming_event_cb(int connection, short type, void *arg)
     }
 }
 
+// incoming connection event e.g. error eof after changing arg for NODE_MSG
+void incoming_event_msg_cb(int connection, short type, void *arg)
+{
+    struct node_self* self = (struct node_self*) ( ( (struct node_msg_arg*)arg )->self );
+    if (type & (BEV_ERROR|BEV_EVENT_EOF)){ // close and free connection on error or closed by remote
+        net_connection_close(self->net, connection);
+    }
+}
+
 //initial read evt (reads header and sets body handler)
 
 void incoming_read_cb(int connection, void *arg)
@@ -876,6 +885,7 @@ void incoming_read_cb(int connection, void *arg)
                 msgarg->self = self;
                 msgarg->msg = msg;
                 net_connection_set_read_cb(self->net, connection, handle_node_message);
+                net_connection_set_event_cb(self->net, connection, incoming_event_msg_cb)
                 net_connection_set_cb_arg(self->net, connection, msgarg);
                 break;
 
