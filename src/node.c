@@ -672,6 +672,7 @@ int node_send_message(struct node_self* self, struct node_message* msg, const in
         return rc;
     }
 
+// TODO should this function activate it?
     log_info("activating connection");
     return net_connection_activate(self->net, connection);
 }
