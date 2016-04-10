@@ -405,6 +405,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         log_info("it's me");
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
+        cb_data->self         = self;
         cb_data->cb           = cb;
         cb_data->found_cb_arg = found_cb_arg;
         cb_data->node         = self->self;
@@ -418,6 +419,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             log_info("it's my succ");
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->self         = self;
             cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
             cb_data->node         = self->successor;
@@ -433,6 +435,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             struct node_info n = node_closest_preceding_node(self, id); // node to ask
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
+            cb_data->self         = self;
             cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
 
@@ -454,6 +457,7 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
     msg.content = NULL;
 
     cb_data = malloc(sizeof(struct node_found_cb_data));
+    cb_data->self         = self;
     cb_data->cb           = cb;
     cb_data->found_cb_arg = found_cb_arg;
 
