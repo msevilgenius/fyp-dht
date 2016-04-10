@@ -310,10 +310,6 @@ void node_found(evutil_socket_t fd, short what, void *arg)
     log_info("found node ----");
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
-    if (cb_data->evt){
-        log_info("free evt");
-        event_free(cb_data->evt);
-    }
     free(cb_data);
 }
 
@@ -398,7 +394,6 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
     log_info("looking for successor of %08X", id);
     log_info("my id is %08X",self->self.id);
     log_info("my succ's id is %08X",self->successor.id);
-    struct event* fndev;
 
     struct node_found_cb_data *cb_data;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
