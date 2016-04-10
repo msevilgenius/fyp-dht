@@ -268,6 +268,7 @@ int node_network_join(struct node_self* self, struct node_info node, on_join_cb_
 
     cb_cb_data->joined_cb = join_cb;
     cb_cb_data->joined_cb_arg = cb_arg;
+    cb_cb_data->self = self;
 
     cb_data->self = self;
     cb_data->found_cb_arg = cb_cb_data;
@@ -355,7 +356,7 @@ void node_found_remote_cb(int connection, void *arg)
 // TODO maybe close an free stuff
 void node_remote_find_event(int connection, short type, void *arg)
 {
-
+    log_info("node_remote_find_event");
 }
 
 //
