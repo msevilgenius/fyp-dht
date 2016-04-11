@@ -311,7 +311,7 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 void node_found(evutil_socket_t fd, short what, void *arg)
 {
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
-    log_info("found node %08X @ %08X:%d", cb_data->node.id, cb_data->node.IP, cb_data->node.port);
+    ///log_info("found node %08X @ %08X:%d", cb_data->node.id, cb_data->node.IP, cb_data->node.port);
     cb_data->cb(cb_data->node, cb_data->found_cb_arg);
     free(cb_data);
 }
@@ -356,7 +356,7 @@ void node_found_remote_cb(int connection, void *arg)
 // TODO maybe close an free stuff
 void node_remote_find_event(int connection, short type, void *arg)
 {
-    log_info("node_remote_find_event");
+    ///log_info("node_remote_find_event");
 }
 
 //
@@ -367,8 +367,8 @@ void node_remote_find_event(int connection, short type, void *arg)
 int node_find_successor_remote(struct node_self* self, struct node_info n,
         hash_type id, struct node_found_cb_data* cb_data)
 {
-    log_info("find_succ_remote");
-    log_info("asking %08X @ %08X:%d for succ of %08X", n.id, n.IP, n.port, id);
+    ///log_info("find_succ_remote");
+    ///log_info("asking %08X @ %08X:%d for succ of %08X", n.id, n.IP, n.port, id);
     struct node_message msg;
     msg.from = self->self;
     msg.to   = n;
@@ -396,13 +396,13 @@ int node_find_successor_remote(struct node_self* self, struct node_info n,
 
 int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb, void* found_cb_arg)
 {
-    log_info("looking for successor of %08X", id);
-    log_info("my id is %08X",self->self.id);
-    log_info("my succ's id is %08X",self->successor.id);
+    ///log_info("looking for successor of %08X", id);
+    ///log_info("my id is %08X",self->self.id);
+    ///log_info("my succ's id is %08X",self->successor.id);
 
     struct node_found_cb_data *cb_data;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
-        log_info("it's me");
+        ///log_info("it's me");
 
         cb_data = malloc(sizeof(struct node_found_cb_data));
         cb_data->self         = self;
@@ -416,7 +416,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         if(node_id_in_range(id, self->self.id, self->successor.id) ||
                 node_id_compare(self->self.id, self->successor.id) == 0)
         { // id is between me and my successor
-            log_info("it's my succ");
+            ///log_info("it's my succ");
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
             cb_data->self         = self;
@@ -427,7 +427,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             node_found(0, 0, cb_data);
 
         }else{ // need to ask another node to find it
-            log_info("need to ask someone else");
+            ///log_info("need to ask someone else");
             struct node_info n = node_closest_preceding_node(self, id); // node to ask
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -481,18 +481,23 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 
 //found successor's predecessor (stabilize part 2)
 void node_stabilize_sp_found(struct node_info succ, void *arg){
-    //log_info("got succ's pred for stab");
+    log_info("got succ's pred for stab");
 
     struct node_self* self = (struct node_self*) arg;
 
     if (succ.port == 0 && succ.IP == 0){ // successor doesn't know its predecessor
         //log_info("succ doesn't know its pred");
     }else
+        log_info("my id is      : %08X", self->self.id);
+        log_info("my pred is    : %08X", self->predecessor.id);
+        log_info("current succ  : %08X", self->successor.id);
+        log_info("potential succ: %08X", succ.id);
         // if (me < s->p < s) then update me->s
         if (node_id_compare(self->self.id, self->successor.id) == 0 ||
-                node_id_in_range(succ.id, self->self.id, self->successor.id)){
+                node_id_in_range(succ.id, self->self.id + 1, self->successor.id)){
             self->successor = succ;
         }
+        log_info("my succ now is: %08X", self->successor.id);
     // notify s
     node_notify_node(self, self->successor);
 }
@@ -530,8 +535,14 @@ void node_notify_node(struct node_self* self, struct node_info node)
 
 void node_notified(struct node_self* self, struct node_info node)
 {
-    //log_info("got notified");
-    int in_range = node_id_in_range(node.id, self->predecessor.id, self->self.id);
+    log_info("got notified");
+    if (self->has_pred){
+        log_info("current pred is   %08X", self->predecessor.id);
+    }else{
+        log_info("current pred is   NONE");
+    }
+        log_info("potential pred is %08X", node.id);
+
     if (!self->has_pred ||
             node_id_in_range(node.id, self->predecessor.id, self->self.id) ||
             node_id_compare(self->predecessor.id, self->self.id) == 0
@@ -666,7 +677,7 @@ char* node_msg_type_str(int msg_type){
 
 int node_send_message(struct node_self* self, struct node_message* msg, const int connection)
 {
-    log_info("node_send_message type: %c", msg->type);
+    //log_info("node_send_message type: %c", msg->type);
     struct evbuffer* write_buf = net_connection_get_write_buffer(self->net, connection);
     if (!write_buf){
         return -1; }
@@ -737,7 +748,7 @@ int node_connect_and_send_message(struct node_self* self,
 
 void node_successor_found_for_remote(struct node_info succ, void *data)
 {
-    log_info("successor found for remote at %08X:%d", succ.IP, succ.port);
+    //log_info("successor found for remote at %08X:%d", succ.IP, succ.port);
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
     struct evbuffer* write_buf = net_connection_get_write_buffer(
             handler_data->self->net, handler_data->connection);
@@ -753,7 +764,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
 
 void handle_succ_request(int connection, void *arg)
 {
-    log_info("handling succ req");
+    //log_info("handling succ req");
 
     hash_type r_id;
     struct node_self* self = (struct node_self*) arg;
@@ -824,7 +835,7 @@ void handle_notif_request(int connection, void *arg)
 
 void handle_node_message(int connection, void *arg)
 {
-    log_info("handle node msg called");
+    ///log_info("handle node msg called");
     struct node_msg_arg* msgarg = (struct node_msg_arg*) arg;
     struct node_self* self = msgarg->self;
 
