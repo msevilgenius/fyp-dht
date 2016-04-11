@@ -60,7 +60,7 @@ void net_connection_read_cb(struct bufferevent *bev, void *ctx)
 {
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
-    log_info("connection read ready %d", conn);
+    //log_info("connection read ready %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->read_cb)
@@ -72,7 +72,7 @@ void net_connection_write_cb(struct bufferevent *bev, void *ctx)
 {
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
-    log_info("connection write ready %d", conn);
+    //log_info("connection write ready %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->write_cb)
@@ -85,7 +85,7 @@ void net_connection_event_cb(struct bufferevent *bev, short what, void *ctx)
 
     struct net_server* srv = ((struct net_conn_cb_arg*) ctx)->srv;
     int conn = ((struct net_conn_cb_arg*) ctx)->conn;
-    log_info("event occurred on connection %d", conn);
+    //log_info("event occurred on connection %d", conn);
     if(net_valid_connection_num(conn)){
         struct net_connection* connection = &(srv->connections[conn]);
         if (connection->evt_cb)
@@ -105,13 +105,13 @@ struct net_server* net_server_create(const uint16_t port, net_connection_event_c
 
     memset(&serv_addr, 0, sizeof(struct sockaddr_in));
 
-    log_info("creating sin:\nport: %04X (%d)", port, port);
+    //log_info("creating sin:\nport: %04X (%d)", port, port);
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(port);
 
-    log_info("created sin:\nport: %d", serv_addr.sin_port);
+    //log_info("created sin:\nport: %d", serv_addr.sin_port);
 
     srv = malloc(sizeof(struct net_server));
 
@@ -184,7 +184,7 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *addr, int socklen, void *arg)
 {
 
-    log_info("listen event callback");
+    //log_info("listen event callback");
     struct net_server *srv = (struct net_server *) arg;
 
     struct event_base* base = evconnlistener_get_base(listener);
@@ -198,7 +198,7 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
         return;
     }
 
-    log_info("creating connection %d", conn);
+    //log_info("creating connection %d", conn);
     struct bufferevent *bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     srv->connections[conn].bev = bev;
 
@@ -218,12 +218,12 @@ void listen_evt_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
-    log_info("calling handler %d", conn);
+    //log_info("calling handler %d", conn);
     srv->incoming_handler(conn, BEV_EVENT_CONNECTED, srv->incoming_handler_arg);
 
     bufferevent_enable(bev, EV_READ|EV_WRITE);
 
-    log_info("incoming enabled %d", conn);
+    //log_info("incoming enabled %d", conn);
 }
 
 int net_server_run(struct net_server* srv)
@@ -278,7 +278,7 @@ int net_connection_create(struct net_server* srv, const uint32_t IP, const uint1
     bufferevent_setcb(bev, net_connection_read_cb, net_connection_write_cb, net_connection_event_cb, srv->connections[conn].net_cb_arg);
 
     pthread_mutex_unlock(&(srv->connections_lock));
-    log_info("created connection %d", conn);
+    //log_info("created connection %d", conn);
 
     return conn;
 }
@@ -355,7 +355,7 @@ int net_connection_activate(struct net_server* srv, const int conn)
 {
     if (net_valid_connection_num(conn)){
 
-        log_info("activating connection %d", conn);
+        //log_info("activating connection %d", conn);
 
         struct sockaddr_in *sin = &(srv->connections[conn].sin);
         struct bufferevent *bev = srv->connections[conn].bev;
