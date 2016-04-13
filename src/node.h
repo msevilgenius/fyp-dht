@@ -7,6 +7,7 @@
 #include "libdht.h"
 #include "netio.h"
 
+#define NUM_OF_SUCCS 5
 #define ID_BITS 32
 #define ID_BYTES (ID_BITS/8)
 #define ID_HEX_CHARS (ID_BITS/4)
@@ -98,6 +99,8 @@ void node_fix_fingers(struct node_self* self);
  * called periodically
  */
 void node_check_predecessor(struct node_self* self);
+
+void node_check_successors(struct node_self* self);
 
 void node_alive_timeout(struct node_self* self, struct node_info* node);
 

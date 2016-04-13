@@ -19,7 +19,7 @@ struct node_found_cb_data;
 
 struct node_self{
     struct node_info self;
-    struct node_info successor;
+    struct node_info successor[NUM_OF_SUCCS];
     struct node_info predecessor;
     short has_pred;
     struct node_info* finger_table;
@@ -59,6 +59,11 @@ struct incoming_handler_data{
 struct node_msg_arg{
     struct node_self* self;
     struct node_message msg;
+};
+
+struct check_succ_arg{
+    struct node_self* self;
+    int succ;
 };
 
 void node_tm_stabilise(evutil_socket_t fd, short what, void *arg);
@@ -109,7 +114,7 @@ struct node_self* node_create(uint16_t listen_port, char* name)
     node->self.port = listen_port;
     node->self.IP = 0x7F000001; // (127.0.0.1)
     memset(&(node->predecessor), 0, sizeof(struct node_info));
-    memset(&(node->successor), 0, sizeof(struct node_info));
+    memset(&(node->successor[0]), 0, sizeof(struct node_info) * NUM_OF_SUCCS);
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
     if (!node->finger_table){
@@ -217,7 +222,7 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
 
 int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
 {
-    self->successor = self->self;
+    self->successor[0] = self->self;
     self->predecessor = self->self;
     self->has_pred = 1;
 
@@ -250,7 +255,7 @@ void node_network_join_succ_found(struct node_info succ, void *arg)
     //log_info("succ found for join\n");
 
     struct node_self* self = cb_data->self;
-    self->successor = succ;
+    self->successor[0] = succ;
 
     struct event* crtevt;
     crtevt = event_new(net_get_base(self->net), -1, 0, node_network_joined, cb_data);
@@ -302,6 +307,12 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 {
     struct node_self* self = (struct node_self*) arg;
     node_check_predecessor(self);
+}
+
+void node_tm_check_succs(evutil_socket_t fd, short what, void *arg)
+{
+    struct node_self* self = (struct node_self*) arg;
+    node_check_successors(self);
 }
 
 //
@@ -398,7 +409,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
 {
     ///log_info("looking for successor of %08X", id);
     ///log_info("my id is %08X",self->self.id);
-    ///log_info("my succ's id is %08X",self->successor.id);
+    ///log_info("my succ's id is %08X",self->successor[0].id);
 
     struct node_found_cb_data *cb_data;
     if (node_id_compare(self->self.id, id) == 0){ // id is my id
@@ -413,8 +424,8 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         node_found(0, 0, cb_data);
     }
     else
-        if(node_id_in_range(id, self->self.id, self->successor.id) ||
-                node_id_compare(self->self.id, self->successor.id) == 0)
+        if(node_id_in_range(id, self->self.id, self->successor[0].id) ||
+                node_id_compare(self->self.id, self->successor[0].id) == 0)
         { // id is between me and my successor
             ///log_info("it's my succ");
 
@@ -422,7 +433,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             cb_data->self         = self;
             cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->successor;
+            cb_data->node         = self->successor[0];
 
             node_found(0, 0, cb_data);
 
@@ -472,7 +483,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
             return (n);
         }
     }
-    return (self->successor);
+    return (self->successor[0]);
 }
 
 //
@@ -490,22 +501,22 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
     }else
         log_info("my id is      : %08X", self->self.id);
         log_info("my pred is    : %08X", self->predecessor.id);
-        log_info("current succ  : %08X", self->successor.id);
+        log_info("current succ  : %08X", self->successor[0].id);
         log_info("potential succ: %08X", succ.id);
         // if (me < s->p < s) then update me->s
-        if (node_id_compare(self->self.id, self->successor.id) == 0 ||
-                node_id_in_range(succ.id, self->self.id + 1, self->successor.id)){
-            self->successor = succ;
+        if (node_id_compare(self->self.id, self->successor[0].id) == 0 ||
+                node_id_in_range(succ.id, self->self.id + 1, self->successor[0].id)){
+            self->successor[0] = succ;
         }
-        log_info("my succ now is: %08X", self->successor.id);
+        log_info("my succ now is: %08X", self->successor[0].id);
     // notify s
-    node_notify_node(self, self->successor);
+    node_notify_node(self, self->successor[0]);
 }
 
 void node_network_stabalize(struct node_self* self)
 {
     //log_info("stabilizing");
-    node_get_predecessor_remote(self, self->successor, node_stabilize_sp_found, self);
+    node_get_predecessor_remote(self, self->successor[0], node_stabilize_sp_found, self);
 }
 
 // TODO
@@ -630,20 +641,39 @@ void node_check_predecessor_event(int connection, short type, void *arg)
     }
 }
 
-void node_check_predecessor(struct node_self* self)
+void node_check_node(struct node_self* self, struct node_info node,
+                        net_connection_data_cb_t reply_handler,
+                        net_connection_event_cb_t event_handler, void* arg)
 {
-    if (!self->has_pred){ return; }
-    //log_info("checking predecessor");
-
     struct node_message msg;
     msg.from    = self->self;
-    msg.to      = self->predecessor;
+    msg.to      = node;
     msg.type    = MSG_T_ALIVE_REQ;
     msg.len     = 0;
     msg.content = NULL;
 
-    node_connect_and_send_message(self, &msg, node_check_predecessor_reply,
-            node_check_predecessor_event, (void*) self, NODE_WAIT_TM_DEFAULT);
+    node_connect_and_send_message(self, &msg, reply_handler,
+            event_handler, arg, NODE_WAIT_TM_DEFAULT);
+}
+
+void node_check_successors(struct node_self* self)
+{
+    struct check_succ_arg arg;
+    for (int i = 0; i < NUM_OF_SUCCS; ++i){
+        if (self->successor[i].IP != 0){
+            arg = malloc(sizeof(struct check_succ_arg));
+            node_check_node(self, self->successor[i], node_check_succ_reply, node_check_succ_event, (void*) arg);
+        }
+    }
+}
+
+
+void node_check_predecessor(struct node_self* self)
+{
+    if (!self->has_pred){ return; }
+    //log_info("checking predecessor");
+    node_check_node(self, self->predecessor, node_check_predecessor_reply, node_check_predecessor_event, (void*) self);
+
 }
 
 //
