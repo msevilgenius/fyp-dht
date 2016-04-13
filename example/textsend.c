@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -21,12 +22,22 @@ pthread_t inthr;
 
 void read_in_msg(struct node_self* node, struct node_message* msg, int conn, void *arg)
 {
-    char* data = malloc(sizeof(char) * (msg->len + 1));
+    printf("msg->len: %d\n", msg->len);
     struct evbuffer* rbuf = net_connection_get_read_buffer(net, conn);
-    evbuffer_remove(rbuf, data, sizeof(data));
+    //printf("buffer len: %lu\n", evbuffer_get_length(rbuf));
+    //uint32_t read = 0;
+    //int cread = 1;
+    /*
+    while (read < msg->len && cread > 0){
+        cread = evbuffer_copyout(rbuf, data + read, sizeof(data) - read);
+        read += cread;
+        printf("read %d bytes of %d (total so far: %d)\n", cread, msg->len, read);
+    }
+    */
+    char* data = evbuffer_pullup(rbuf, -1);
     data[msg->len] = '\0';
     printf("received:\n%s\n", data);
-    free(data);
+    evbuffer_drain(rbuf, -1);
 }
 
 
@@ -67,6 +78,7 @@ void found_node(struct node_info ninfo, void* arg)
 {
     printf("found node?\n");
     char *msg = (char*) arg;
+    printf("sending [%lu] %s\n", strlen(msg), msg);
     struct node_message nmsg;
     nmsg.to = ninfo;
     nmsg.content = msg;
@@ -84,6 +96,7 @@ void found_node(struct node_info ninfo, void* arg)
     */
     struct timeval tmo = {5,0};
     node_connect_and_send_message(node, &nmsg, NULL, out_conn_event, NULL, &tmo);
+    free(msg);
 
 
 }
@@ -97,6 +110,7 @@ void *in_thread(void *arg)
         while (!fgets(name, 256, stdin));
         printf("enter message\n");
         while (!fgets(msg, 1024, stdin));
+        printf("sending %s\n", msg);
         node_find_successor(node, get_id(name), found_node, (void*)msg);
     }
 }
