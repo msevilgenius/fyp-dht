@@ -20,6 +20,7 @@ struct node_found_cb_data;
 struct node_self{
     struct node_info self;
     struct node_info successor[NUM_OF_SUCCS];
+    pthread_mutex_t succs_lock;
     struct node_info predecessor;
     short has_pred;
     struct node_info* finger_table;
@@ -51,6 +52,11 @@ struct finger_update_arg{
     int finger_num;
 };
 
+struct succ_update_arg{
+    struct node_self* self;
+    int succ_num;
+};
+
 struct incoming_handler_data{
     struct node_self* self;
     int connection;
@@ -61,10 +67,13 @@ struct node_msg_arg{
     struct node_message msg;
 };
 
-struct check_succ_arg{
+struct node_check_arg{
     struct node_self* self;
-    int succ;
+    node_check_cb cb;
+    void* arg;
 };
+
+typedef void (*node_check_cb)(struct node_self*, short success, int, void *);
 
 void node_tm_stabilise(evutil_socket_t fd, short what, void *arg);
 
@@ -95,6 +104,18 @@ int node_id_in_range(hash_type id, hash_type min, hash_type max)
     }
 }
 
+int node_first_alive_succ(struct node_self* self)
+{
+    for (int i = 0; i < NUM_OF_SUCCS; ++i){
+        if (self->successor[i].IP != 0){
+            return i;
+        }
+    }
+    // if this happens we have lost all contact with the network so all bets are off
+    log_err("No successors, lost connection with network");
+    return -1;
+}
+
 //
 // node creation and cleanup
 //
@@ -114,7 +135,13 @@ struct node_self* node_create(uint16_t listen_port, char* name)
     node->self.port = listen_port;
     node->self.IP = 0x7F000001; // (127.0.0.1)
     memset(&(node->predecessor), 0, sizeof(struct node_info));
-    memset(&(node->successor[0]), 0, sizeof(struct node_info) * NUM_OF_SUCCS);
+    memset(&(node->successor), 0, sizeof(struct node_info) * NUM_OF_SUCCS);
+
+    if (pthread_mutex_init(&(node->succs_lock), NULL) != 0){
+        log_err("failed to init lock");
+        free(node);
+        return NULL; }
+    }
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
     if (!node->finger_table){
@@ -158,6 +185,7 @@ void node_destroy(struct node_self* n)
 #endif // USE_NETW
 
     if (!n) { return; }
+    pthread_mutex_destroy(&(n->succs_lock));
     if (n->net){ net_server_destroy(n->net); }
     if (n->finger_table){ free(n->finger_table); }
     free(n);
@@ -424,8 +452,10 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         node_found(0, 0, cb_data);
     }
     else
-        if(node_id_in_range(id, self->self.id, self->successor[0].id) ||
-                node_id_compare(self->self.id, self->successor[0].id) == 0)
+        pthread_mutex_lock(&(self->succs_lock));
+        int succ_num = node_first_alive_succ(self);
+        if(node_id_in_range(id, self->self.id, self->successor[succ_num].id) ||
+                node_id_compare(self->self.id, self->successor[succ_num].id) == 0)
         { // id is between me and my successor
             ///log_info("it's my succ");
 
@@ -433,12 +463,13 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             cb_data->self         = self;
             cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
-            cb_data->node         = self->successor[0];
+            cb_data->node         = self->successor[succ_num];
 
             node_found(0, 0, cb_data);
-
+            pthread_mutex_unlock(&(self->succs_lock));
         }else{ // need to ask another node to find it
             ///log_info("need to ask someone else");
+            pthread_mutex_unlock(&(self->succs_lock));
             struct node_info n = node_closest_preceding_node(self, id); // node to ask
 
             cb_data = malloc(sizeof(struct node_found_cb_data));
@@ -483,7 +514,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
             return (n);
         }
     }
-    return (self->successor[0]);
+    return (node_first_alive_succ(self));
 }
 
 //
@@ -491,24 +522,27 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 //
 
 //found successor's predecessor (stabilize part 2)
-void node_stabilize_sp_found(struct node_info succ, void *arg){
+void node_stabilize_sp_found(struct node_info new_succ, void *arg){
     log_info("got succ's pred for stab");
 
     struct node_self* self = (struct node_self*) arg;
 
-    if (succ.port == 0 && succ.IP == 0){ // successor doesn't know its predecessor
+    if (new_succ.port == 0 && new_succ.IP == 0){ // successor doesn't know its predecessor
         //log_info("succ doesn't know its pred");
     }else
         log_info("my id is      : %08X", self->self.id);
         log_info("my pred is    : %08X", self->predecessor.id);
-        log_info("current succ  : %08X", self->successor[0].id);
-        log_info("potential succ: %08X", succ.id);
+        log_info("current succ  : %08X", node_first_alive_succ(self).id);
+        log_info("potential succ: %08X", new_succ.id);
         // if (me < s->p < s) then update me->s
-        if (node_id_compare(self->self.id, self->successor[0].id) == 0 ||
-                node_id_in_range(succ.id, self->self.id + 1, self->successor[0].id)){
-            self->successor[0] = succ;
+        pthread_mutex_lock(&(self->succs_lock));
+        int succ_num = node_first_alive_succ(self);
+        if (node_id_compare(self->self.id, self->successor[succ_num].id) == 0 ||
+                node_id_in_range(new_succ.id, self->self.id + 1, self->successor[succ_num].id)){
+            self->successor[succ_num] = new_succ;
         }
-        log_info("my succ now is: %08X", self->successor[0].id);
+        log_info("my succ now is: %08X", self->successor[succ_num].id);
+        pthread_mutex_unlock(&(self->succs_lock));
     // notify s
     node_notify_node(self, self->successor[0]);
 }
@@ -516,7 +550,7 @@ void node_stabilize_sp_found(struct node_info succ, void *arg){
 void node_network_stabalize(struct node_self* self)
 {
     //log_info("stabilizing");
-    node_get_predecessor_remote(self, self->successor[0], node_stabilize_sp_found, self);
+    node_get_predecessor_remote(self, self->successor[node_first_alive_succ(self)], node_stabilize_sp_found, self);
 }
 
 // TODO
@@ -564,6 +598,46 @@ void node_notified(struct node_self* self, struct node_info node)
 }
 
 //
+// Update Succs
+//
+
+void node_update_succs_found(struct node_info, void* arg)
+{
+    struct succ_update_arg* sua = (struct succ_update_arg*) arg;
+    pthread_mutex_lock(&(self->succs_lock));
+
+    sua->self->successor[sua->succ_num] = node_info;
+    if (sua->succ_num < (NUM_OF_SUCCS - 1)){
+        node_update_succ(self, node_first_alive_succ(self));
+    }
+    pthread_mutex_unlock(&(self->succs_lock));
+}
+
+void node_update_succ(struct node_self* self, int succ_num)
+{
+    struct node_found_cb_data* cb_data = malloc(sizeof(struct node_found_cb_data));
+    struct succ_update_arg* arg = malloc(sizeof(struct succ_update_arg));
+
+    arg->self     = self;
+    arg->succ_num = succ_num + 1;
+
+    cb_data->self         = self;
+    cb_data->cb           = node_update_succs_found;
+    cb_data->found_cb_arg = arg;
+
+    struct node_info succ = self->successor[succ_num];
+    node_find_successor_remote(self, succ, succ.id + 1, cb_data);
+}
+
+void node_update_succs(struct node_self* self)
+{
+
+    pthread_mutex_lock(&(self->succs_lock));
+    node_update_succ(self, node_first_alive_succ(self));
+    pthread_mutex_unlock(&(self->succs_lock));
+}
+
+//
 // Fix Fingers
 //
 
@@ -606,6 +680,10 @@ void node_fix_fingers(struct node_self* self)
     }
 }
 
+//
+// Check nodes
+//
+
 void node_check_predecessor_reply(int connection, void *arg)
 {
     struct node_self* self = (struct node_self*) arg;
@@ -628,22 +706,63 @@ void node_check_predecessor_reply(int connection, void *arg)
     net_connection_close(self->net, connection);
 }
 
-void node_check_predecessor_event(int connection, short type, void *arg)
+void node_check_pred_result(struct node_self* self, short success, void* arg)
 {
-    struct node_self* self = (struct node_self*) arg;
+    if (!success){ // pred didn't respond
+        self->has_pred = 0;
+        memset(&(self->predecessor), 0, sizeof(struct node_info));
+    }
+}
+
+void node_check_succ_result(struct node_self* self, short success, void* arg)
+{
+    int* sn = (int*) arg;
+    if (!success){ // succ *sn didn't respond
+        memset(&(self->successor[*sn]), 0, sizeof(struct node_info));
+    }
+}
+
+void node_check_node_reply(int connection, void *arg)
+{
+    struct node_check_arg* nc_arg = (struct node_check_arg*) arg;
+    nc_arg->cb(nc_arg->self, 1, nc_arg->arg);
+
+    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+
+    size_t line_len;
+    char* token;
+
+    token = evbuffer_readln(read_buf, &line_len, EVBUFFER_EOL_LF);
+    if (token[0] == 'Y'){
+        // HOORAY
+        //log_info("node is not dead");
+        nc_arg->cb(nc_arg->self, 1, nc_arg->arg);
+    }else{
+        // couldn't reach node
+        nc_arg->cb(nc_arg->self, 0, nc_arg->arg);
+        //log_info("node is dead");
+    }
+    free(token);
+    free(arg);
+
+    net_connection_close(nc_arg->self->net, connection);
+}
+
+void node_check_node_event(int connection, short type, void *arg)
+{
+    struct node_check_arg* nc_arg = (struct node_check_arg*) arg;
+
     if (type & (BEV_EVENT_EOF|BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
         if (type & (BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
-            // couldn't reach pred
-            self->has_pred = 0;
-            memset(&(self->predecessor), 0, sizeof(struct node_info));
+            nc_arg->cb(nc_arg->self, 0, nc_arg->arg);
         }
-        net_connection_close(self->net, connection);
+        free(arg);
+        net_connection_close(nc_arg->self->net, connection);
     }
 }
 
 void node_check_node(struct node_self* self, struct node_info node,
-                        net_connection_data_cb_t reply_handler,
-                        net_connection_event_cb_t event_handler, void* arg)
+                        node_check_cb cb, void* arg)
 {
     struct node_message msg;
     msg.from    = self->self;
@@ -652,17 +771,24 @@ void node_check_node(struct node_self* self, struct node_info node,
     msg.len     = 0;
     msg.content = NULL;
 
-    node_connect_and_send_message(self, &msg, reply_handler,
-            event_handler, arg, NODE_WAIT_TM_DEFAULT);
+    struct node_check_arg* nc_arg = malloc(sizeof(nc_arg));
+    nc_arg->self = self;
+    nc_arg->arg  = arg;
+    nc_arg->cb   = cb;
+
+    node_connect_and_send_message(self, &msg, node_check_node_reply,
+            node_check_node_event, nc_arg, NODE_WAIT_TM_DEFAULT);
 }
 
 void node_check_successors(struct node_self* self)
 {
-    struct check_succ_arg arg;
+    int* sn;
     for (int i = 0; i < NUM_OF_SUCCS; ++i){
         if (self->successor[i].IP != 0){
             arg = malloc(sizeof(struct check_succ_arg));
-            node_check_node(self, self->successor[i], node_check_succ_reply, node_check_succ_event, (void*) arg);
+            sn = malloc(sizeof(int));
+            *sn = i;
+            node_check_node(self, self->successor[i], node_check_succ_result , (void*) sn);
         }
     }
 }
@@ -672,7 +798,7 @@ void node_check_predecessor(struct node_self* self)
 {
     if (!self->has_pred){ return; }
     //log_info("checking predecessor");
-    node_check_node(self, self->predecessor, node_check_predecessor_reply, node_check_predecessor_event, (void*) self);
+    node_check_node(self, self->predecessor, node_check_pred_result, NULL);
 
 }
 
