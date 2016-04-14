@@ -159,6 +159,16 @@ void net_server_set_incoming_cb_arg(struct net_server *srv, void* arg)
     srv->incoming_handler_arg = arg;
 }
 
+void net_server_stop(struct net_server* srv)
+{
+    if(srv){
+        for(int i = 0; i < MAX_OPEN_CONNECTIONS; ++i){
+            net_connection_close(srv, i);
+        }
+        event_base_loopbreak(srv->base);
+    }
+}
+
 void net_server_destroy(struct net_server* srv)
 {
     if(srv){

@@ -25,6 +25,8 @@ struct net_server* net_server_create(const uint16_t port, net_connection_event_c
 
 void net_server_set_incoming_cb_arg(struct net_server *srv, void* arg);
 
+void net_server_stop(struct net_server* srv);
+
 void net_server_destroy(struct net_server* srv);
 
 int net_server_run(struct net_server* srv);
