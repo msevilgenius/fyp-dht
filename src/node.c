@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #include "node.h"
 #include "netio.h"
@@ -67,19 +68,24 @@ struct node_msg_arg{
     struct node_message msg;
 };
 
+typedef void (*node_check_cb)(struct node_self*, short, void *);
+
 struct node_check_arg{
     struct node_self* self;
     node_check_cb cb;
     void* arg;
 };
 
-typedef void (*node_check_cb)(struct node_self*, short success, int, void *);
 
 void node_tm_stabilise(evutil_socket_t fd, short what, void *arg);
 
 void node_tm_fix_fingers(evutil_socket_t fd, short what, void *arg);
 
 void node_tm_check_pred(evutil_socket_t fd, short what, void *arg);
+
+void node_tm_check_succs(evutil_socket_t fd, short what, void *arg);
+
+void node_tm_update_succs(evutil_socket_t fd, short what, void *arg);
 
 
 //
@@ -140,7 +146,7 @@ struct node_self* node_create(uint16_t listen_port, char* name)
     if (pthread_mutex_init(&(node->succs_lock), NULL) != 0){
         log_err("failed to init lock");
         free(node);
-        return NULL; }
+        return NULL;
     }
 
     node->finger_table = malloc(sizeof(struct node_info) * ID_BITS);
@@ -223,20 +229,28 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
     struct event* stabilise_tm_ev;
     struct event* fix_finger_tm_ev;
     struct event* check_pred_tm_ev;
+    struct event* check_succs_tm_ev;
+    struct event* update_succs_tm_ev;
 
     struct timeval stab_tm = {STABILIZE_PERIOD, 0};
     const struct timeval *stab_tm_comm = event_base_init_common_timeout(base, &stab_tm);
+    struct timeval stab_check_tm = {STABILIZE_CHECK_PERIOD, 0};
+    const struct timeval *stab_check_tm_comm = event_base_init_common_timeout(base, &stab_tm);
     //log_info("got common timeval\n");
 
     stabilise_tm_ev  = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_stabilise,   (void*) self);
     fix_finger_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_fix_fingers, (void*) self);
     check_pred_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_check_pred,  (void*) self);
+    check_succs_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_check_succs,  (void*) self);
+    update_succs_tm_ev = event_new(base, -1, EV_TIMEOUT|EV_PERSIST, node_tm_update_succs,  (void*) self);
 
     //log_info("created stab evs\n");
 
     event_add(stabilise_tm_ev, stab_tm_comm);
     event_add(fix_finger_tm_ev, stab_tm_comm);
     event_add(check_pred_tm_ev, stab_tm_comm);
+    event_add(check_succs_tm_ev, stab_check_tm_comm);
+    event_add(update_succs_tm_ev, stab_tm_comm);
     //TODO call stab now?
     //log_info("added stab evs\n");
 
@@ -339,9 +353,20 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 
 void node_tm_check_succs(evutil_socket_t fd, short what, void *arg)
 {
+    printf("check_succs_tm\n");
     struct node_self* self = (struct node_self*) arg;
     node_check_successors(self);
 }
+
+void node_update_succs(struct node_self* self);
+
+void node_tm_update_succs(evutil_socket_t fd, short what, void *arg)
+{
+    printf("update_succs_tm\n");
+    struct node_self* self = (struct node_self*) arg;
+    node_update_succs(self);
+}
+
 
 //
 // callbacks for when node is found
@@ -514,7 +539,7 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
             return (n);
         }
     }
-    return (node_first_alive_succ(self));
+    return (self->successor[node_first_alive_succ(self)]);
 }
 
 //
@@ -528,11 +553,11 @@ void node_stabilize_sp_found(struct node_info new_succ, void *arg){
     struct node_self* self = (struct node_self*) arg;
 
     if (new_succ.port == 0 && new_succ.IP == 0){ // successor doesn't know its predecessor
-        //log_info("succ doesn't know its pred");
-    }else
+        log_info("succ doesn't know its pred");
+    }else{
         log_info("my id is      : %08X", self->self.id);
         log_info("my pred is    : %08X", self->predecessor.id);
-        log_info("current succ  : %08X", node_first_alive_succ(self).id);
+        log_info("current succ  : %08X", self->successor[node_first_alive_succ(self)].id);
         log_info("potential succ: %08X", new_succ.id);
         // if (me < s->p < s) then update me->s
         pthread_mutex_lock(&(self->succs_lock));
@@ -543,6 +568,7 @@ void node_stabilize_sp_found(struct node_info new_succ, void *arg){
         }
         log_info("my succ now is: %08X", self->successor[succ_num].id);
         pthread_mutex_unlock(&(self->succs_lock));
+    }
     // notify s
     node_notify_node(self, self->successor[0]);
 }
@@ -600,21 +626,23 @@ void node_notified(struct node_self* self, struct node_info node)
 //
 // Update Succs
 //
+void node_update_succ(struct node_self* self, int succ_num);
 
-void node_update_succs_found(struct node_info, void* arg)
+void node_update_succs_found(struct node_info found, void* arg)
 {
     struct succ_update_arg* sua = (struct succ_update_arg*) arg;
-    pthread_mutex_lock(&(self->succs_lock));
+    pthread_mutex_lock(&(sua->self->succs_lock));
 
-    sua->self->successor[sua->succ_num] = node_info;
+    sua->self->successor[sua->succ_num] = found;
     if (sua->succ_num < (NUM_OF_SUCCS - 1)){
-        node_update_succ(self, node_first_alive_succ(self));
+        node_update_succ(sua->self, sua->succ_num);
     }
-    pthread_mutex_unlock(&(self->succs_lock));
+    pthread_mutex_unlock(&(sua->self->succs_lock));
 }
 
 void node_update_succ(struct node_self* self, int succ_num)
 {
+    printf("node_update_succ %d\n", succ_num);
     struct node_found_cb_data* cb_data = malloc(sizeof(struct node_found_cb_data));
     struct succ_update_arg* arg = malloc(sizeof(struct succ_update_arg));
 
@@ -626,11 +654,13 @@ void node_update_succ(struct node_self* self, int succ_num)
     cb_data->found_cb_arg = arg;
 
     struct node_info succ = self->successor[succ_num];
+    if (succ.IP == 0) return;
     node_find_successor_remote(self, succ, succ.id + 1, cb_data);
 }
 
 void node_update_succs(struct node_self* self)
 {
+    printf("node_update_succs called\n");
 
     pthread_mutex_lock(&(self->succs_lock));
     node_update_succ(self, node_first_alive_succ(self));
@@ -717,17 +747,18 @@ void node_check_pred_result(struct node_self* self, short success, void* arg)
 void node_check_succ_result(struct node_self* self, short success, void* arg)
 {
     int* sn = (int*) arg;
+    printf("check result: %d\n", *sn);
     if (!success){ // succ *sn didn't respond
         memset(&(self->successor[*sn]), 0, sizeof(struct node_info));
     }
+    free(sn);
 }
 
 void node_check_node_reply(int connection, void *arg)
 {
     struct node_check_arg* nc_arg = (struct node_check_arg*) arg;
-    nc_arg->cb(nc_arg->self, 1, nc_arg->arg);
 
-    struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
+    struct evbuffer* read_buf = net_connection_get_read_buffer(nc_arg->self->net, connection);
 
     size_t line_len;
     char* token;
@@ -743,9 +774,9 @@ void node_check_node_reply(int connection, void *arg)
         //log_info("node is dead");
     }
     free(token);
-    free(arg);
 
     net_connection_close(nc_arg->self->net, connection);
+    free(arg);
 }
 
 void node_check_node_event(int connection, short type, void *arg)
@@ -756,8 +787,8 @@ void node_check_node_event(int connection, short type, void *arg)
         if (type & (BEV_EVENT_ERROR|BEV_EVENT_TIMEOUT)) {
             nc_arg->cb(nc_arg->self, 0, nc_arg->arg);
         }
-        free(arg);
         net_connection_close(nc_arg->self->net, connection);
+        free(arg);
     }
 }
 
@@ -785,9 +816,9 @@ void node_check_successors(struct node_self* self)
     int* sn;
     for (int i = 0; i < NUM_OF_SUCCS; ++i){
         if (self->successor[i].IP != 0){
-            arg = malloc(sizeof(struct check_succ_arg));
             sn = malloc(sizeof(int));
             *sn = i;
+            printf("checking: %d\n", *sn);
             node_check_node(self, self->successor[i], node_check_succ_result , (void*) sn);
         }
     }

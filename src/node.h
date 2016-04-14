@@ -13,8 +13,9 @@
 #define ID_HEX_CHARS (ID_BITS/4)
 #define FINGER_SIZE_INIT 6
 // wait 20 secs before timout node
-#define NODE_TIMEOUT 90
+#define NODE_TIMEOUT 20
 #define STABILIZE_PERIOD 30
+#define STABILIZE_CHECK_PERIOD 9
 
 struct node_self;
 
