@@ -7,7 +7,7 @@
 #include "libdht.h"
 #include "netio.h"
 
-#define NUM_OF_SUCCS 5
+#define NUM_OF_SUCCS 8
 #define ID_BITS 32
 #define ID_BYTES (ID_BITS/8)
 #define ID_HEX_CHARS (ID_BITS/4)
