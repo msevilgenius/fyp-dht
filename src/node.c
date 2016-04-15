@@ -46,6 +46,7 @@ struct node_found_cb_data{
     void* found_cb_arg;
     struct node_info node;
     struct event* evt;
+    short hops;
 };
 
 struct finger_update_arg{
@@ -291,7 +292,7 @@ int node_network_create(struct node_self* self, on_join_cb_t join_cb, void *arg)
     return net_server_run(self->net);
 }
 
-void node_network_join_succ_found(struct node_info succ, void *arg)
+void node_network_join_succ_found(struct node_info succ, void *arg, short h)
 {
     struct node_join_cb_data* cb_data = (struct node_join_cb_data*) arg;
 
@@ -377,7 +378,7 @@ void node_found(evutil_socket_t fd, short what, void *arg)
 {
     struct node_found_cb_data* cb_data = (struct node_found_cb_data*) arg;
     ///log_info("found node %08X @ %08X:%d", cb_data->node.id, cb_data->node.IP, cb_data->node.port);
-    cb_data->cb(cb_data->node, cb_data->found_cb_arg);
+    cb_data->cb(cb_data->node, cb_data->found_cb_arg, cb_data->hops);
     free(cb_data);
 }
 
@@ -403,7 +404,8 @@ void node_found_remote_cb(int connection, void *arg)
     }else{
         if(evbuffer_remove(read_buf, (char*)&(cb_data->node.id), ID_BYTES) < 0 ||
                 evbuffer_remove(read_buf, (char*)&(cb_data->node.IP), 4) < 0 ||
-                evbuffer_remove(read_buf, (char*)&(cb_data->node.port), 2) < 0)
+                evbuffer_remove(read_buf, (char*)&(cb_data->node.port), 2) < 0 ||
+                evbuffer_remove(read_buf, (char*)&(cb_data->hops), sizeof(short)) < 0)
         {
             log_err("found? but error reading");
             net_connection_close(self->net, connection);
@@ -474,6 +476,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
         cb_data->cb           = cb;
         cb_data->found_cb_arg = found_cb_arg;
         cb_data->node         = self->self;
+        cb_data->hops         = 0;
 
         node_found(0, 0, cb_data);
     }
@@ -490,6 +493,7 @@ int node_find_successor(struct node_self* self, hash_type id, node_found_cb_t cb
             cb_data->cb           = cb;
             cb_data->found_cb_arg = found_cb_arg;
             cb_data->node         = self->successor[succ_num];
+            cb_data->hops         = 0;
 
             node_found(0, 0, cb_data);
             pthread_mutex_unlock(&(self->succs_lock));
@@ -672,7 +676,7 @@ void node_update_succs(struct node_self* self)
 // Fix Fingers
 //
 
-void finger_update(struct node_info node, void *arg)
+void finger_update(struct node_info node, void *arg, short hops)
 {
     struct finger_update_arg* fua = (struct finger_update_arg*) arg;
 
@@ -934,7 +938,7 @@ int node_connect_and_send_message(struct node_self* self,
 }
 
 
-void node_successor_found_for_remote(struct node_info succ, void *data)
+void node_successor_found_for_remote(struct node_info succ, void *data, short hops)
 {
     //log_info("successor found for remote at %08X:%d", succ.IP, succ.port);
     struct incoming_handler_data* handler_data = (struct incoming_handler_data*) data;
@@ -945,6 +949,7 @@ void node_successor_found_for_remote(struct node_info succ, void *data)
     evbuffer_add(write_buf, (char*)&(succ.id), ID_BYTES);
     evbuffer_add(write_buf, (char*)&(succ.IP), 4);
     evbuffer_add(write_buf, (char*)&(succ.port), 2);
+    evbuffer_add(write_buf, (char*)&(hops + 1), sizeof(short));
 
     free(handler_data);
 }
@@ -955,6 +960,7 @@ void handle_succ_request(int connection, void *arg)
     //log_info("handling succ req");
 
     hash_type r_id;
+    short hops;
     struct node_self* self = (struct node_self*) arg;
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 

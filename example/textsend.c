@@ -56,9 +56,10 @@ void out_conn_event(int connection, short type, void *arg)
     }
 }
 
-void found_node(struct node_info ninfo, void* arg)
+void found_node(struct node_info ninfo, void* arg, short hops)
 {
     //printf("found node?\n");
+    printf("found node in %d hops\n", hops);
     char *msg = (char*) arg;
     //printf("sending [%lu] %s\n", strlen(msg), msg);
     struct node_message nmsg;

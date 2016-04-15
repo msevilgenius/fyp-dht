@@ -33,7 +33,7 @@ struct node_message{
 };
 
 typedef void (*on_join_cb_t)(void* arg);
-typedef void (*node_found_cb_t)(struct node_info, void *);
+typedef void (*node_found_cb_t)(struct node_info, void *, short);
 typedef void (*node_msg_cb_t)(struct node_self*, struct node_message*, int, void *);
 
 struct node_self* node_create(uint16_t listen_port, char* name);
