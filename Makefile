@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Isrc -Wextra $(OPTFLAGS)
+CFLAGS=-Wall -Isrc -Wextra -g -DNDEBUG $(OPTFLAGS)
 LIBS=-ldl event $(OPTLIBS)
 PREFIX?=/usr/local
 
@@ -16,6 +16,9 @@ all: $(TARGET) $(SO_TARGET)
 dev: CFLAGS=-Wall -Isrc -Wextra $(OPTFLAGS)
 dev: all
 
+nofinger: CFLAGS+= -DNOFINGER
+nofinger: all
+
 $(TARGET): CFLAGS += -fPIC
 $(TARGET): build $(OBJECTS)
 	ar rcs $@ $(OBJECTS)
@@ -27,6 +30,11 @@ $(SO_TARGET): $(TARGET) $(OBJECTS)
 build:
 	@mkdir -p build
 	@mkdir -p bin
+
+install:all
+	install -d $(DESTDIR)/$(PREFIX)/lib/
+	install $(TARGET) $(DESTDIR)/$(PREFIX)/lib/
+
 
 clean:
 	rm -rf build $(OBJECTS) $(TESTS)

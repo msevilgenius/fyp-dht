@@ -355,7 +355,7 @@ void node_tm_check_pred(evutil_socket_t fd, short what, void *arg)
 
 void node_tm_check_succs(evutil_socket_t fd, short what, void *arg)
 {
-    printf("check_succs_tm\n");
+    //printf("check_succs_tm\n");
     struct node_self* self = (struct node_self*) arg;
     node_check_successors(self);
 }
@@ -364,7 +364,7 @@ void node_update_succs(struct node_self* self);
 
 void node_tm_update_succs(evutil_socket_t fd, short what, void *arg)
 {
-    printf("update_succs_tm\n");
+    //printf("update_succs_tm\n");
     struct node_self* self = (struct node_self*) arg;
     node_update_succs(self);
 }
@@ -538,12 +538,14 @@ void node_get_predecessor_remote(struct node_self* self, struct node_info n,
 
 struct node_info node_closest_preceding_node(struct node_self* self, hash_type id)
 {
+#ifndef NOFINGER
     for (hash_type i = ID_BITS-1; i > 0; --i){
         struct node_info n = self->finger_table[i];
         if ((n.IP != 0 && n.port != 0 && n.id != 0) && node_id_in_range(n.id, self->self.id, id)){
             return (n);
         }
     }
+#endif
     return (self->successor[node_first_alive_succ(self)]);
 }
 
@@ -647,7 +649,7 @@ void node_update_succs_found(struct node_info found, void* arg)
 
 void node_update_succ(struct node_self* self, int succ_num)
 {
-    printf("node_update_succ %d\n", succ_num);
+    //printf("node_update_succ %d\n", succ_num);
     struct node_found_cb_data* cb_data = malloc(sizeof(struct node_found_cb_data));
     struct succ_update_arg* arg = malloc(sizeof(struct succ_update_arg));
 
@@ -665,7 +667,7 @@ void node_update_succ(struct node_self* self, int succ_num)
 
 void node_update_succs(struct node_self* self)
 {
-    printf("node_update_succs called\n");
+    //printf("node_update_succs called\n");
 
     pthread_mutex_lock(&(self->succs_lock));
     node_update_succ(self, node_first_alive_succ(self));
@@ -752,7 +754,7 @@ void node_check_pred_result(struct node_self* self, short success, void* arg)
 void node_check_succ_result(struct node_self* self, short success, void* arg)
 {
     int* sn = (int*) arg;
-    printf("check result: %d\n", *sn);
+    //printf("check result: %d\n", *sn);
     if (!success){ // succ *sn didn't respond
         memset(&(self->successor[*sn]), 0, sizeof(struct node_info));
     }
@@ -823,7 +825,7 @@ void node_check_successors(struct node_self* self)
         if (self->successor[i].IP != 0){
             sn = malloc(sizeof(int));
             *sn = i;
-            printf("checking: %d\n", *sn);
+            //printf("checking: %d\n", *sn);
             node_check_node(self, self->successor[i], node_check_succ_result , (void*) sn);
         }
     }
@@ -949,7 +951,8 @@ void node_successor_found_for_remote(struct node_info succ, void *data, short ho
     evbuffer_add(write_buf, (char*)&(succ.id), ID_BYTES);
     evbuffer_add(write_buf, (char*)&(succ.IP), 4);
     evbuffer_add(write_buf, (char*)&(succ.port), 2);
-    evbuffer_add(write_buf, (char*)&(hops + 1), sizeof(short));
+    ++hops;
+    evbuffer_add(write_buf, (char*)&(hops), sizeof(short));
 
     free(handler_data);
 }
@@ -960,7 +963,6 @@ void handle_succ_request(int connection, void *arg)
     //log_info("handling succ req");
 
     hash_type r_id;
-    short hops;
     struct node_self* self = (struct node_self*) arg;
     struct evbuffer* read_buf = net_connection_get_read_buffer(self->net, connection);
 
