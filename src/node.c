@@ -255,6 +255,7 @@ void node_network_joined(evutil_socket_t fd, short what, void *arg)
     //log_info("added stab evs\n");
 
     node_tm_stabilise(0,0,(void*)self);
+    node_tm_update_succs(0,0,(void*)self);
     node_tm_fix_fingers(0,0,(void*)self);
 
 
