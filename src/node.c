@@ -571,13 +571,15 @@ void node_stabilize_sp_found(struct node_info new_succ, void *arg){
         int succ_num = node_first_alive_succ(self);
         if (node_id_compare(self->self.id, self->successor[succ_num].id) == 0 ||
                 node_id_in_range(new_succ.id, self->self.id + 1, self->successor[succ_num].id)){
-            self->successor[succ_num] = new_succ;
+            self->successor[0] = new_succ;
         }
         log_info("my succ now is: %08X", self->successor[succ_num].id);
         pthread_mutex_unlock(&(self->succs_lock));
     }
     // notify s
-    node_notify_node(self, self->successor[0]);
+    pthread_mutex_lock(&(self->succs_lock));
+    node_notify_node(self, self->successor[node_first_alive_succ(self)]);
+    pthread_mutex_unlock(&(self->succs_lock));
 }
 
 void node_network_stabalize(struct node_self* self)
