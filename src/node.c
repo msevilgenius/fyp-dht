@@ -1204,3 +1204,10 @@ void incoming_connection(int connection, short type, void *arg)
     struct bufferevent* bufev = net_connection_get_bufev(self->net, connection);
     bufferevent_setwatermark(bufev, EV_READ, 1 + LEN_STR_BYTES, 0);
 }
+
+//
+int two_to_the_n(int n)
+{
+    if (n < 1) return 1;
+    return 2 << (n-1);
+}

@@ -19,10 +19,5 @@ hash_type get_id(const char* name)
     return hash_id;
 }
 
-//
-int two_to_the_n(int n)
-{
-    if (n < 1) return 1;
-    return 2 << (n-1);
-}
+
 

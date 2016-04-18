@@ -11,7 +11,6 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
-#include "net_wrapper.h"
 #include "node.h"
 #include "proto.h"
 
