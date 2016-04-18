@@ -11,7 +11,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 
-#include "node.h"
+#include "libdht.h"
 #include "proto.h"
 
 struct node_self *node;
