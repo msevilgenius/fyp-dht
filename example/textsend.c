@@ -20,33 +20,18 @@ struct net_server* net;
 int handle;
 pthread_t inthr;
 
+short running;
+
 void read_in_msg(struct node_self* node, struct node_message* msg, int conn, void *arg)
 {
     //printf("msg->len: %d\n", msg->len);
     struct evbuffer* rbuf = net_connection_get_read_buffer(net, conn);
     //printf("buffer len: %lu\n", evbuffer_get_length(rbuf));
-    //uint32_t read = 0;
-    //int cread = 1;
-    /*
-    while (read < msg->len && cread > 0){
-        cread = evbuffer_copyout(rbuf, data + read, sizeof(data) - read);
-        read += cread;
-        printf("read %d bytes of %d (total so far: %d)\n", cread, msg->len, read);
-    }
-    */
-    char* data = evbuffer_pullup(rbuf, -1);
+    unsigned char* data = evbuffer_pullup(rbuf, -1);
     data[msg->len] = '\0';
     printf("received:\n%s\n", data);
     evbuffer_drain(rbuf, -1);
 }
-
-void event_incoming(int conn, short what, void *arg)
-{
-    if (what & (BEV_ERROR|BEV_EVENT_EOF|BEV_EVENT_TIMEOUT)){
-        net_connection_close(net, conn);
-    }
-}
-
 
 
 void out_conn_event(int connection, short type, void *arg)
@@ -67,16 +52,6 @@ void found_node(struct node_info ninfo, void* arg, short hops)
     nmsg.content = msg;
     nmsg.len = strlen(msg);
     nmsg.type = MSG_T_NODE_MSG;
-    /*
-    int conn = netw_net_connection_create(net, ninfo.IP, ninfo.port, handle);
-    struct evbuffer* wbuf = net_connection_get_write_buffer(net, conn);
-    evbuffer_add_printf(wbuf, "%s\n", msg);
-    free(msg);
-    net_connection_set_event_cb(net, conn, event_incoming);
-    struct timeval tmo = {5,0};
-    net_connection_set_timeouts(net, conn, &tmo, &tmo);
-    net_connection_activate(net, conn);
-    */
     struct timeval tmo = {5,0};
     node_connect_and_send_message(node, &nmsg, NULL, out_conn_event, NULL, &tmo);
     free(msg);
@@ -87,7 +62,7 @@ void found_node(struct node_info ninfo, void* arg, short hops)
 void *in_thread(void *arg)
 {
     char name[256];
-    while (1){
+    while (running){
         printf("enter name\n");
         char *msg = malloc(sizeof(char) * 1024);
         while (!fgets(name, 256, stdin));
@@ -96,11 +71,13 @@ void *in_thread(void *arg)
         //printf("sending %s\n", msg);
         node_find_successor(node, get_id(name), found_node, (void*)msg);
     }
+    pthread_exit(NULL);
 }
 
 void net_joined(void* arg)
 {
     printf("Joined Network\n");
+    running = 1;
     pthread_create(&inthr, NULL, in_thread, NULL);
 }
 
@@ -138,8 +115,10 @@ int main(int argc, char **argv){
     }
 
 
-    pthread_kill(inthr, SIGKILL);
+    //pthread_kill(inthr, SIGKILL);
 
+    running = 0;
+    pthread_join(inthr, NULL);
 
 
     return 0;

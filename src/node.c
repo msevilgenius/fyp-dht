@@ -554,7 +554,8 @@ struct node_info node_closest_preceding_node(struct node_self* self, hash_type i
 //
 
 //found successor's predecessor (stabilize part 2)
-void node_stabilize_sp_found(struct node_info new_succ, void *arg){
+void node_stabilize_sp_found(struct node_info new_succ, void *arg, short hops)
+{
     log_info("got succ's pred for stab");
 
     struct node_self* self = (struct node_self*) arg;
@@ -637,7 +638,7 @@ void node_notified(struct node_self* self, struct node_info node)
 //
 void node_update_succ(struct node_self* self, int succ_num);
 
-void node_update_succs_found(struct node_info found, void* arg)
+void node_update_succs_found(struct node_info found, void* arg, short hops)
 {
     struct succ_update_arg* sua = (struct succ_update_arg*) arg;
     pthread_mutex_lock(&(sua->self->succs_lock));
@@ -1143,7 +1144,7 @@ void incoming_read_cb(int connection, void *arg)
             case MSG_T_PRED_REP:
             case MSG_T_ALIVE_REP:
             default:
-                log_warn("unexpected message type recieved on icoming connection");
+                log_warn("unexpected message type received on incoming connection");
                 break;
         }
 
@@ -1182,7 +1183,7 @@ void incoming_read_cb(int connection, void *arg)
             case MSG_T_PRED_REP:
             case MSG_T_ALIVE_REP:
             default:
-                log_warn("unexpected message type recieved on icoming connection");
+                log_warn("unexpected message type received on incoming connection");
                 break;
         }
 
